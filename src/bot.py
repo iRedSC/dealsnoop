@@ -1,68 +1,90 @@
 from discord.ext import commands
 import discord
-import os
-from dotenv import load_dotenv
-
+from pickler import ObjectStore
 from search_config import SearchConfig
-
+from site_check import SearchEngine
+from dotenv import load_dotenv
+import os
 
 load_dotenv()
-API_KEY = os.getenv('BOT_TOKEN')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+class Client(commands.Bot):
+    def __init__(self, command_prefix, intents):
+        super().__init__(command_prefix=command_prefix, intents=intents)
+        self.db = ObjectStore("searches.pkl")
+
+    async def on_ready(self):
+        engine.check_sites.start()
+        await self.tree.sync(guild=GUILD_ID)
+        print("Bot started successfully.")
+
+    async def send_embed(self, channel_id: int, title: str, description: str, img: str, url: str, location: str, date: str, distance: str) -> None:
+        channel = self.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        embed = discord.Embed(title=title, url=url, description=description, color=0x03b2f8)
+        embed.set_author(name=f"{date}", url=url, icon_url="https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353")
+        # embed.set_image(url=img)
+        embed.set_thumbnail(url=img)
+        embed.set_footer(text=f"{location} — {distance}", icon_url="https://cdn-icons-png.flaticon.com/512/1076/1076983.png")
+        # embed.set_timestamp()
+        # embed.add_embed_field(name="Field 1", value="Lorem ipsum")
+        await channel.send(embed=embed) 
+
+
+
+GUILD_ID = discord.Object(1411757356894650381)
+
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=">>", intents=intents)
+bot = Client(command_prefix=">>", intents=intents)
+
+engine = SearchEngine(bot, bot.db.get_all_objects())
+
+@bot.tree.command(name="watch", description="Watch for a specific item on various marketplaces.", guild=GUILD_ID)
+async def watch(interaction: discord.Interaction, terms: str, target_price: str = "", context: str = "", city_code: str = '107976589222439', days_listed: int = 1, radius: int = 30, channel_id: str | None = None):
+    try:
+
+        config = SearchConfig(bot.db.get_all_objects().__len__() + 1, tuple([term.strip() for term in terms.split(",")]), int(channel_id) if channel_id else 1412121636815241397, target_price=target_price, context=context, city_code=city_code, days_listed=days_listed, radius=radius)
+        bot.db.add_object(config)
+        engine.searches = bot.db.get_all_objects()
+        await interaction.response.send_message(f"Added search: {repr(config)}")
+    except ValueError:
+        await interaction.response.send_message(f"ERRROR: Channel ID not a number.")
+
+@bot.tree.command(name="list", description="List searches currently being watched.", guild=GUILD_ID)
+async def list(interaction: discord.Interaction):
+    _list = ""
+    for search in bot.db.get_all_objects():
+        _list += f"\n{search.id}. {search.terms}"
+
+    if len(_list) >= 1:
+        await interaction.response.send_message(_list)
+        return
+    await interaction.response.send_message("No watches searches")
+
+@bot.tree.command(name="unwatch", description="Remove watched listing.", guild=GUILD_ID)
+async def unwatch(interaction: discord.Interaction, id: int):
+    for search in bot.db.get_all_objects():
+        print(repr(search))
+
+        if search.id == id:
+            print("ID MATCH")
+            bot.db.remove_object(search)
+            engine.searches = bot.db.get_all_objects()
+            await interaction.response.send_message(f"Removed {search.terms} from watchlist")
+            return
+
+    await interaction.response.send_message(f"ID not found.")
 
 
-def parse_search_query(query: str) -> SearchConfig:
-    parts = query.strip().split()
 
-    terms_str = []
-    keyword_args = {}
+bot.run(token=BOT_TOKEN) # type: ignore
 
-    # Separate terms from keyword arguments
-    for part in parts:
-        if "=" in part:
-            key, value = part.split("=", 1)
-            keyword_args[key.lower()] = value
-        else:
-            terms_str.append(part)
 
-    terms_list = []
-    arg_start_index = len(parts)
-    for i, part in enumerate(parts):
-        if "=" in part:
-            arg_start_index = i
-            break
-    
-    # All parts before the first keyword arg (or all parts if no keyword args) are terms
-    terms_phrase = " ".join(parts[:arg_start_index])
-    terms_list = [term.strip() for term in terms_phrase.split(",") if term.strip()]
-
-    config = SearchConfig(terms=terms_list)
-
-    if "r" in keyword_args:
-        config.radius = int(keyword_args["r"])
-    if "p" in keyword_args:
-        config.target_price = keyword_args["p"]
-    if "d" in keyword_args:
-        config.days_listed = int(keyword_args["d"])
-    if "c" in keyword_args:
-        config.context = keyword_args["c"]
-    if "l" in keyword_args:
-        # For location, we'll keep it simple for now, as the example shows just 'harrisburg'
-        # without a city_code update. A more robust solution would map 'harrisburg' to its city_code.
-        config.city = keyword_args["l"].replace("_", " ").title() # Simple title case and space replacement
-
-    return config
-
-@bot.command()
-async def find(ctx, terms, *, arg):
-    search = parse_search_query(terms, arg)
-    await ctx.send(search.__repr__())
-
-bot.run(token=API_KEY)
 
 
 
