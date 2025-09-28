@@ -22,7 +22,7 @@ from search_config import SearchConfig
 from typing import Protocol
 
 chrome_options = Options()
-# chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--headless=new")
 
 load_dotenv()
 API_KEY = os.getenv('OPENAI_KEY')
@@ -179,6 +179,8 @@ class SearchEngine:
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")
             await asyncio.sleep(5)
+        if len(cache.urls) >= 2000:
+            cache.flush(1000)
 
 def validate_listing(link):
     img_tag = link.find('img')
