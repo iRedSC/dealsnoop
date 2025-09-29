@@ -1,1 +1,1 @@
-worker: /opt/venv/bin/python -m golfinder.main
+worker: /opt/venv/bin/python -m src.main
