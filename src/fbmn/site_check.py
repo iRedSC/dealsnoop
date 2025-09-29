@@ -100,7 +100,7 @@ class SearchEngine:
             logger.warning("No 'See More' button found, skipping..")
             
         try:
-            description = soup.find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x xudqn12 x3x7a5m x6prxxf xvq8zen xo1l8bm xzsf02u', dir="auto").text # type: ignore
+            description = soup.find('span', class_='x193iq5w xeuugli x13faqbe', dir="auto").text # type: ignore
         except AttributeError as e:
             description = "No Description."
             logger.warning("No description found.")
