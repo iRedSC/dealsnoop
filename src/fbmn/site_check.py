@@ -1,5 +1,7 @@
 import asyncio
+import tempfile
 from typing import Literal
+import chromedriver_autoinstaller
 from discord.ext import tasks
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -14,28 +16,31 @@ import random
 from openai import OpenAI
 from dotenv import load_dotenv
 # from discord_webhook import DiscordWebhook, DiscordEmbed
-from listing_cache import Cache
+from fbmn.listing_cache import Cache
 from dataclasses import dataclass
 
-from search_config import SearchConfig
+from fbmn.search_config import SearchConfig
 
 from typing import Protocol
 
-chrome_options = Options()
-chrome_options.add_argument("--headless=new")
+options = Options()
+options.add_argument("--headless=new")
+options.add_argument("--headless=new")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
+options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
+
+chromedriver_autoinstaller.install()
 
 load_dotenv()
 API_KEY = os.getenv('OPENAI_KEY')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
-cache = Cache("cache.txt")
+cache = Cache("/data/cache.txt")
 
 chatgpt = OpenAI(api_key=API_KEY)
 
-chrome_install = ChromeDriverManager().install()
-
-folder = os.path.dirname(chrome_install)
-chromedriver_path = os.path.join(folder, "chromedriver.exe")
 
 
 
@@ -58,7 +63,7 @@ class Product:
 class SearchEngine:
     def __init__(self, bot: Bot, searches: set[SearchConfig]):
         self.browser = webdriver.Chrome(
-        service = Service(chromedriver_path), options=chrome_options,
+        options=options,
         )
         self.bot = bot
         self.searches = searches
