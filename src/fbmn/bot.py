@@ -3,11 +3,7 @@ import discord
 from fbmn.pickler import ObjectStore
 from fbmn.search_config import SearchConfig
 from fbmn.site_check import SearchEngine
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
-BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 GUILD_ID = discord.Object(1411757356894650381)
 
