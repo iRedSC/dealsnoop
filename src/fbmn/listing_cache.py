@@ -64,7 +64,7 @@ class Cache:
         """
         Checks if a URL is already in the cache.
         """
-        logger.info("Searching for url in cache: $M$", url)
+        logger.info(f"Searching for url in cache: $M$ {url}")
         in_cache = url.strip() in self.urls
         logger.info(in_cache)
         return in_cache
