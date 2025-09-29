@@ -100,7 +100,8 @@ class SearchEngine:
             date = "Last 24h"
         logger.info(f"Date set to '{date}'")
 
-            
+        
+        await asyncio.sleep(2)
         try:
             description = soup.find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq').text # type: ignore
         except AttributeError as e:
