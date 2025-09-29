@@ -1,12 +1,9 @@
 import asyncio
 import tempfile
-from typing import Literal
 import chromedriver_autoinstaller
 from discord.ext import tasks
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 import os
@@ -15,13 +12,11 @@ import re
 import random
 from openai import OpenAI
 from dotenv import load_dotenv
-# from discord_webhook import DiscordWebhook, DiscordEmbed
-from fbmn.listing_cache import Cache
 from dataclasses import dataclass
+from typing import Protocol
 
 from fbmn.search_config import SearchConfig
-
-from typing import Protocol
+from fbmn.listing_cache import Cache
 from fbmn.logger import logger
 
 options = Options()
@@ -236,14 +231,3 @@ If the listing is above the max price but is a very good deal anyway, respond Tr
     
     return True
 
-
-
-
-
-
-
-
-
-
-# info panel
-# .html-div.x78zum5.xdj266r.x1xegmmw.xat24cr.x13fj5qh.x1y1aw1k.xf159sx.xwib8y2.xmzvs34
