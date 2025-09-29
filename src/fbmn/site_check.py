@@ -103,7 +103,7 @@ class SearchEngine:
         
         await asyncio.sleep(2)
         try:
-            description = soup.find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq').text # type: ignore
+            description = soup.find('span', attrs={"dir": "auto"}).text # type: ignore
         except AttributeError as e:
             description = "No Description."
             logger.warning("No description found.")
