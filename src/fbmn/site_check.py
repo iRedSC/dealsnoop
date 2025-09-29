@@ -82,6 +82,13 @@ class SearchEngine:
             logger.warning("Could not find or click the close button")
             pass
 
+        try:
+            await asyncio.sleep(2)
+            see_more = await asyncio.to_thread(self.browser.find_element, By.CSS_SELECTOR, "div[role='button'].x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr")
+            await asyncio.to_thread(see_more.click)
+        except NoSuchElementException:
+            logger.warning("No 'See More' button found, skipping..")
+
         html = self.browser.page_source
 
         soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
@@ -93,15 +100,15 @@ class SearchEngine:
             date = "Last 24h"
         logger.info(f"Date set to '{date}'")
 
-        # try:
-        #     await asyncio.sleep(2)
-        #     see_more = await asyncio.to_thread(self.browser.find_element, By.CSS_SELECTOR, "div[role='button'].x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr")
-        #     await asyncio.to_thread(see_more.click)
-        # except NoSuchElementException:
-        #     logger.warning("No 'See More' button found, skipping..")
             
         try:
-            description = soup.find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x xudqn12 x3x7a5m x6prxxf xvq8zen xo1l8bm xzsf02u', dir="auto").text # type: ignore
+            description_el = await asyncio.to_thread(
+            self.browser.find_element,
+            By.XPATH,
+            "//div[@role='none' or @dir='auto']"
+            )
+            description = description_el.text.strip()
+            
         except AttributeError as e:
             description = "No Description."
             logger.warning("No description found.")
