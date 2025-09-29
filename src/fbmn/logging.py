@@ -1,7 +1,9 @@
 import logging
 import re
+import sys
+from pythonjsonlogger import json
 
-# ANSI color codes
+# ANSI color codes (optional, for local dev console)
 COLORS = {
     "R": "\033[31m",  # Red
     "G": "\033[32m",  # Green
@@ -28,47 +30,37 @@ def colorize(text: str) -> str:
     return pattern.sub(replacer, text)
 
 
-# Map log levels to colors
-LEVEL_COLORS = {
-    logging.DEBUG: COLORS["B"],   # Blue
-    logging.INFO: COLORS["G"],    # Green
-    logging.WARNING: COLORS["Y"], # Yellow
-    logging.ERROR: COLORS["R"],   # Red
-    logging.CRITICAL: COLORS["M"] # Magenta
-}
+class JSONFormatter(json.JsonFormatter):
+    """JSON formatter with optional inline color parsing."""
+
+    def process_log_record(self, log_record):
+        # If you want color-markup for local console readability,
+        # but keep JSON fields clean, you can include both.
+        raw_message = str(log_record.get("message", ""))
+        log_record["message"] = colorize(raw_message)
+
+        return super().process_log_record(log_record)
 
 
-class ColorFormatter(logging.Formatter):
-    def format(self, record):
-        # colorize the log level name
-        level_color = LEVEL_COLORS.get(record.levelno, "")
-        record.levelname = f"{level_color}{record.levelname}{RESET}"
-
-        # colorize the message text if it uses $X$ markup
-        record.msg = colorize(str(record.msg))
-
-        return super().format(record)
-
-
-# Setup handler and logger
-handler = logging.StreamHandler()
-handler.setFormatter(
-    ColorFormatter(
-        "%(asctime)s [%(levelname)-8s]: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+# Setup JSON handler (stdout is standard for Docker/Dokploy)
+json_handler = logging.StreamHandler(sys.stdout)
+json_handler.setFormatter(
+    JSONFormatter(
+        "{asctime}{levelname}{message}",
+        style="{"
     )
 )
 
+# Main discord_bot logger
 logger = logging.getLogger("discord_bot")
 logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+logger.handlers.clear()
+logger.addHandler(json_handler)
 logger.propagate = False
 
-# Remove default handlers from discord logger and attach our color handler
+# Discord library logger
 discord_logger = logging.getLogger("discord")
-for h in discord_logger.handlers[:]:
-    discord_logger.removeHandler(h)
-
-discord_logger.addHandler(handler)
+discord_logger.handlers.clear()
+discord_logger.addHandler(json_handler)
 discord_logger.setLevel(logging.WARNING)
 discord_logger.propagate = False
