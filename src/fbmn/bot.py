@@ -3,7 +3,7 @@ import discord
 from fbmn.pickler import ObjectStore
 from fbmn.search_config import SearchConfig
 from fbmn.site_check import SearchEngine
-from fbmn.logging import logger
+from fbmn.logger import logger
 
 
 GUILD_ID = discord.Object(1411757356894650381)

@@ -1,6 +1,6 @@
 import pickle
 import os
-from fbmn.logging import logger
+from fbmn.logger import logger
 
 class ObjectStore:
     """
