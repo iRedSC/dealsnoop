@@ -1,10 +1,7 @@
 import logging
 import re
-import sys
-import os
-from pythonjsonlogger import json
 
-# ANSI color codes (optional, only for local dev console)
+# ANSI color codes
 COLORS = {
     "R": "\033[31m",  # Red
     "G": "\033[32m",  # Green
@@ -19,8 +16,6 @@ RESET = "\033[0m"
 # Regex: matches $X$ followed by text
 pattern = re.compile(r"\$([A-Z])\$(.*?)((?=\$[A-Z]\$)|$)")
 
-USE_COLORS = os.getenv("USE_COLORS", "0") == "1"
-
 
 def colorize(text: str) -> str:
     """Replace $X$text-style markup with ANSI color codes."""
@@ -28,36 +23,51 @@ def colorize(text: str) -> str:
         code = match.group(1)
         content = match.group(2)
         color = COLORS.get(code, "")
-        return f"{color}{content}{RESET}" if USE_COLORS else content
+        return f"{color}{content}{RESET}"
 
     return pattern.sub(replacer, text)
 
 
-class JSONFormatter(json.JsonFormatter):
-    """JSON formatter with optional inline color parsing."""
+# Map log levels to colors
+LEVEL_COLORS = {
+    logging.DEBUG: COLORS["B"],   # Blue
+    logging.INFO: COLORS["G"],    # Green
+    logging.WARNING: COLORS["Y"], # Yellow
+    logging.ERROR: COLORS["R"],   # Red
+    logging.CRITICAL: COLORS["M"] # Magenta
+}
 
-    def process_log_record(self, log_record):
-        raw_message = str(log_record.get("message", ""))
-        # Use colored text only if enabled (otherwise plain)
-        log_record["message"] = colorize(raw_message)
-        return super().process_log_record(log_record)
+
+class ColorFormatter(logging.Formatter):
+    def format(self, record):
+        # colorize the log level name
+        level_color = LEVEL_COLORS.get(record.levelno, "")
+        record.levelname = f"{level_color}{record.levelname}{RESET}"
+
+        # colorize the message text if it uses $X$ markup
+        record.msg = colorize(str(record.msg))
+
+        return super().format(record)
 
 
-def get_logger(name: str, level=logging.DEBUG) -> logging.Logger:
-    """Factory to create configured loggers."""
-    json_handler = logging.StreamHandler(sys.stdout)
-    json_handler.setFormatter(
-        JSONFormatter("{asctime}{levelname}{message}", style="{")
+# Setup handler and logger
+handler = logging.StreamHandler()
+handler.setFormatter(
+    ColorFormatter(
+        "%(levelname)-8s - %(message)s"
     )
+)
 
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.handlers.clear()
-    logger.addHandler(json_handler)
-    logger.propagate = False
-    return logger
+logger = logging.getLogger("discord_bot")
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
+logger.propagate = False
 
+# Remove default handlers from discord logger and attach our color handler
+discord_logger = logging.getLogger("discord")
+for h in discord_logger.handlers[:]:
+    discord_logger.removeHandler(h)
 
-# Example setup
-logger = get_logger("discord_bot", logging.DEBUG)
-discord_logger = get_logger("discord", logging.WARNING)
+discord_logger.addHandler(handler)
+discord_logger.setLevel(logging.WARNING)
+discord_logger.propagate = False
