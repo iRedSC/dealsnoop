@@ -20,6 +20,7 @@ openai = ">=1.107.0,<2.0.0"
 webdriver-manager = ">=4.0.2,<5.0.0"
 discord-py = ">=2.6.3,<3.0.0"
 chromedriver-autoinstaller = ">=0.6.4,<0.7.0"
+python-json-logger = "^3.3.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
