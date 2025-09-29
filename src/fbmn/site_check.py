@@ -91,6 +91,7 @@ class SearchEngine:
             date = date.text
         else:
             date = "Last 24h"
+        logger.info(f"Date set to '{date}'")
 
         try:
             await asyncio.sleep(2)
@@ -160,10 +161,12 @@ class SearchEngine:
             url = f"https://facebook.com{link.get('href')}"
             img = link.find('img')['src']
             date, description = await self.get_product_info(url)
+            logger.info("Got date and description")
 
             
             if not await validate_quality(title, search.terms, search.target_price, price, description, search.context):
                 continue
+            logger.info("Quality validated")
 
             response = await asyncio.to_thread(chatgpt.responses.create, 
             model="gpt-4.1-mini",
