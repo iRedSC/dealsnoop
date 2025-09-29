@@ -84,7 +84,7 @@ class SearchEngine:
 
         html = self.browser.page_source
 
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
 
         date = soup.find("abbr")
         if date:
