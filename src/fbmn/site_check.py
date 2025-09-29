@@ -172,8 +172,8 @@ class SearchEngine:
             product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
             await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, distance)
+            cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
-        cache.save_cache()
         return products
     
     @tasks.loop(minutes=5.0)
