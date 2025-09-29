@@ -42,9 +42,12 @@ handler.setFormatter(ColorFormatter(
 logger = logging.getLogger("discord_bot")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
+logger.propagate = False
 
 discord_logger = logging.getLogger("discord")
 for handler in discord_logger.handlers[:]:
     discord_logger.removeHandler(handler)
 
 discord_logger.addHandler(handler)
+discord_logger.setLevel(logging.WARNING)
+discord_logger.propagate = False
