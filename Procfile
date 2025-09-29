@@ -1,0 +1,1 @@
+worker: /opt/venv/bin/python -m golfinder.main
