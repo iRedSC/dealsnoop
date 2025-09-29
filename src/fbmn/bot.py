@@ -51,6 +51,11 @@ class Commands(commands.Cog):
         self.bot = bot
         self.engine = engine
 
+    async def cog_load(self):
+        self.bot.tree.add_command(self.watch, guild=GUILD_ID)
+        self.bot.tree.add_command(self.list, guild=GUILD_ID)
+        self.bot.tree.add_command(self.unwatch, guild=GUILD_ID)
+
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(self, interaction: discord.Interaction, terms: str, target_price: str = "", context: str = "", city_code: str = '107976589222439', days_listed: int = 1, radius: int = 30, channel_id: str | None = None):
         try:
