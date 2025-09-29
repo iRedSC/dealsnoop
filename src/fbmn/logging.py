@@ -43,7 +43,7 @@ logger = logging.getLogger("discord_bot")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
-discord_logger = logging.getLogger("discord_bot")
+discord_logger = logging.getLogger("discord")
 for handler in discord_logger.handlers[:]:
     discord_logger.removeHandler(handler)
 
