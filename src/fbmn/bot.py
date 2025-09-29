@@ -3,6 +3,7 @@ import discord
 from fbmn.pickler import ObjectStore
 from fbmn.search_config import SearchConfig
 from fbmn.site_check import SearchEngine
+from fbmn.logging import logger
 
 
 GUILD_ID = discord.Object(1411757356894650381)
@@ -23,11 +24,13 @@ class Client(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.add_cog(Commands(self, self.engine))
+        logger.info("$G$Command Cog added")
         await self.tree.sync(guild=GUILD_ID)
+        logger.info("$G$Command tree synced")
 
     async def on_ready(self):
         self.engine.check_sites.start()
-        print("Bot started successfully.")
+        logger.info("$G$Bot started successfully.")
 
     async def send_embed(self, channel_id: int, title: str, description: str, img: str, url: str, location: str, date: str, distance: str) -> None:
         channel = self.get_channel(channel_id)
@@ -73,10 +76,10 @@ class Commands(commands.Cog):
     @discord.app_commands.command(name="unwatch", description="Remove watched listing.")
     async def unwatch(self, interaction: discord.Interaction, id: int):
         for search in self.bot.db.get_all_objects():
-            print(repr(search))
+            logger.debug(f"Found SearchConfig: $M${print(repr(search))}")
 
             if search.id == id:
-                print("ID MATCH")
+                print("SearchConfig ID $G$matches")
                 self.bot.db.remove_object(search)
                 self.engine.searches = self.bot.db.get_all_objects()
                 await interaction.response.send_message(f"Removed {search.terms} from watchlist")

@@ -1,5 +1,6 @@
 import pickle
 import os
+from fbmn.logging import logger
 
 class ObjectStore:
     """
@@ -38,7 +39,7 @@ class ObjectStore:
             self.objects.remove(obj)
             self._save_objects()
         else:
-            print(f"Warning: Object {obj} not found in the store.")
+            logger.warning(f"Warning: Object {obj} not found in the store.")
 
     def get_all_objects(self):
         """
@@ -56,9 +57,9 @@ class ObjectStore:
         self.objects.clear()
         if os.path.exists(self.filename):
             os.remove(self.filename)
-            print(f"Store cleared and file '{self.filename}' deleted.")
+            logger.info(f"Store cleared and file $M$'{self.filename}'$W$ deleted.")
         else:
-            print("Store cleared, but no pickle file existed to delete.")
+            logger.info("Store cleared, but no pickle file existed to delete.")
 
     def _save_objects(self):
         """
@@ -67,9 +68,9 @@ class ObjectStore:
         try:
             with open(self.filename, 'wb') as f:
                 pickle.dump(self.objects, f)
-            print(f"Objects saved to '{self.filename}'.")
+            logger.info(f"Objects saved to '{self.filename}'.")
         except Exception as e:
-            print(f"Error saving objects: {e}")
+            logger.error(f"Error saving objects: $R${e}")
 
     def _load_objects(self):
         """
@@ -80,10 +81,10 @@ class ObjectStore:
             try:
                 with open(self.filename, 'rb') as f:
                     self.objects = pickle.load(f)
-                print(f"Objects loaded from '{self.filename}'.")
+                logger.info(f"Objects loaded from '{self.filename}'.")
             except Exception as e:
-                print(f"Error loading objects from '{self.filename}': {e}")
+                logger.error(f"Error loading objects from '{self.filename}': {e}")
                 self.objects = set() # Initialize an empty set on error
         else:
-            print(f"No existing store file '{self.filename}' found. Starting with an empty store.")
+            logger.info(f"No existing store file '{self.filename}' found. Starting with an empty store.")
             self.objects = set()

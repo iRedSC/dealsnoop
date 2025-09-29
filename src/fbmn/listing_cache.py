@@ -1,5 +1,6 @@
 import os
 from typing import Set
+from fbmn.logging import logger
 
 class Cache:
     def __init__(self, cache_file_path: str):
@@ -12,7 +13,7 @@ class Cache:
         self.cache_file_path = cache_file_path
         self.urls: Set[str] = set()
         self._load_cache()  # Try to load existing cache on startup
-        print(f"Cache initialized with file: {self.cache_file_path}")
+        logger.info(f"Cache initialized with file: $B${self.cache_file_path}")
 
     def _load_cache(self):
         """
@@ -23,18 +24,18 @@ class Cache:
             try:
                 with open(self.cache_file_path, "r", encoding="utf-8") as f:
                     self.urls = {line.strip() for line in f if line.strip()}
-                print(
+                logger.info(
                     f"Cache loaded successfully from {self.cache_file_path}. "
                     f"{len(self.urls)} URLs found."
                 )
             except IOError as e:
-                print(
+                logger.info(
                     f"Error loading cache from {self.cache_file_path}: {e}. "
                     f"Starting with an empty cache."
                 )
                 self.urls = set()
         else:
-            print(
+            logger.info(
                 f"Cache file not found at {self.cache_file_path}. "
                 "Starting with an empty cache."
             )
@@ -49,9 +50,9 @@ class Cache:
             with open(self.cache_file_path, "w", encoding="utf-8") as f:
                 for url in self.urls:
                     f.write(url + "\n")
-            print(f"Cache saved to {self.cache_file_path}. {len(self.urls)} URLs.")
+            logger.info(f"Cache saved to $M${self.cache_file_path}$W$. {len(self.urls)} URLs.")
         except IOError as e:
-            print(f"Error saving cache to {self.cache_file_path}: {e}")
+            logger.info(f"Error saving cache to $M${self.cache_file_path}$W$: $B${e}")
 
     def add_url(self, url: str):
         """
@@ -63,9 +64,9 @@ class Cache:
         """
         Checks if a URL is already in the cache.
         """
-        print("Searching for url in cache:", url)
+        logger.info("Searching for url in cache: $M$", url)
         in_cache = url.strip() in self.urls
-        print(in_cache)
+        logger.info(in_cache)
         return in_cache
 
     def flush(self, x: int):
@@ -77,11 +78,11 @@ class Cache:
             x (int): Number of lines to remove from the beginning of the file.
         """
         if x <= 0:
-            print("Flush amount must be greater than 0.")
+            logger.warning("$Y$Flush amount must be greater than 0.")
             return
 
         if not os.path.exists(self.cache_file_path):
-            print("Cache file does not exist. Nothing to flush.")
+            logger.error("$R$Cache file does not exist. Nothing to flush.")
             return
 
         try:
@@ -89,7 +90,7 @@ class Cache:
                 lines = [line.strip() for line in f if line.strip()]
 
             if not lines:
-                print("Cache file is empty. Nothing to flush.")
+                logger.info("Cache file is empty. Nothing to flush.")
                 return
 
             # Drop the first x lines

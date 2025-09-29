@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from fbmn.search_config import SearchConfig
 
 from typing import Protocol
+from fbmn.logging import logger
 
 options = Options()
 options.add_argument("--headless=new")
@@ -75,10 +76,10 @@ class SearchEngine:
         try:
             close_button = await asyncio.to_thread(self.browser.find_element, By.XPATH, '//div[@aria-label="Close" and @role="button"]')
             await asyncio.to_thread(close_button.click)
-            print("Close button clicked!")
+            logger.info("Close button clicked")
         
         except:
-            print("Could not find or click the close button!")
+            logger.warning("Could not find or click the close button")
             pass
 
         html = self.browser.page_source
@@ -96,13 +97,13 @@ class SearchEngine:
             see_more = await asyncio.to_thread(self.browser.find_element, By.CSS_SELECTOR, "div[role='button'].x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr")
             await asyncio.to_thread(see_more.click)
         except NoSuchElementException:
-            print("No 'See More' button found, skipping..")
+            logger.warning("No 'See More' button found, skipping..")
             
         try:
             description = soup.find('div', class_='xz9dl7a xyri2b xsag5q8 x1c1uobl x126k92a').find('div').find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x xudqn12 x3x7a5m x6prxxf xvq8zen xo1l8bm xzsf02u', dir="auto").text # type: ignore
         except AttributeError:
             description = "No Description."
-            print("No description found.")
+            logger.warning("No description found.")
 
 
         return (date, description)
@@ -177,7 +178,7 @@ class SearchEngine:
     
     @tasks.loop(minutes=5.0)
     async def check_sites(self):
-        print("checking sites")
+        logger.info("$G$Checking sites")
 
         for search in self.searches:
             await self.perform_search(search, "creation_time_descend")
@@ -195,7 +196,7 @@ def validate_listing(link):
     id = re.sub(r"/marketplace/item/(\d+)", r"\1", link.get('href'))
     id = re.sub(r'/.*', '', id)
     if cache.contains(id):
-        print("Hit listing in cache, skipping..")
+        logger.info("Hit listing in cache, skipping")
         return False
     cache.add_url(id)
     return True
@@ -221,8 +222,7 @@ Here is the listing:
 Is the listing what I'm looking for, and is {price} a good price for it?
 If the listing is above the max price but is a very good deal anyway, respond True; only do this if the listing is actually what is being looked for.
 """)
-    print(f"Is {price} in ballpark of {target_price}:\n{response.output_text}")
-    print(f"RESPONSE: {response.output_text.split("|| ")[-1].lower()}")
+    logger.info(f"{response.output_text.split("|| ")[-1].lower()}")
     
     if response.output_text.split("|| ")[-1].lower() != 'true':
         return
