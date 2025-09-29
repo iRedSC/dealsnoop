@@ -102,13 +102,7 @@ class SearchEngine:
 
             
         try:
-            description_el = await asyncio.to_thread(
-            self.browser.find_element,
-            By.XPATH,
-            "//div[@role='none' or @dir='auto']"
-            )
-            description = description_el.text.strip()
-            
+            description = soup.find('span', class_='x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq').text # type: ignore
         except AttributeError as e:
             description = "No Description."
             logger.warning("No description found.")
