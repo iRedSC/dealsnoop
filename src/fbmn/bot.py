@@ -21,9 +21,12 @@ class Client(commands.Bot):
         self.db = ObjectStore("/data/searches.pkl")
         self.engine = SearchEngine(self, self.db.get_all_objects())
 
+    async def setup_hook(self) -> None:
+        await self.add_cog(Commands(self, self.engine))
+        await self.tree.sync(guild=GUILD_ID)
+
     async def on_ready(self):
         self.engine.check_sites.start()
-        await self.tree.sync(guild=GUILD_ID)
         print("Bot started successfully.")
 
     async def send_embed(self, channel_id: int, title: str, description: str, img: str, url: str, location: str, date: str, distance: str) -> None:
