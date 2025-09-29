@@ -1,1 +1,1 @@
-worker: /opt/venv/bin/python -m src.main
+worker: /opt/venv/bin/python -m fbmn.main

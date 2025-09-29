@@ -1,6 +1,5 @@
 import discord
 from fbmn.bot import Client
-from fbmn.site_check import SearchEngine
 
 intents = discord.Intents.default()
 intents.message_content = True

@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 
-packages = [{include = "src"}]
+packages = [{ include = "fbmn", from = "src" }]
 
 
 
