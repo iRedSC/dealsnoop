@@ -1,6 +1,7 @@
 import aiohttp
 from dotenv import load_dotenv
 import os
+from fbmn.logger import logger
 
 load_dotenv()
 MAPS_KEY = os.getenv('GOOGLE_MAPS_KEY')
@@ -30,4 +31,5 @@ async def get_distance_and_duration(origin: str, destination: str) -> tuple[floa
                 distance_miles = distance_meters / 1609.34
                 return distance_miles, duration_text
             except (KeyError, IndexError):
-                raise Exception("Invalid response structure:", data)
+                logger.error("Invalid maps response")
+                return 0, "Unknown"
