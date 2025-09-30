@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 from typing import Protocol
 
+from fbmn.maps import get_distance_and_duration
 from fbmn.search_config import SearchConfig
 from fbmn.listing_cache import Cache
 from fbmn.logger import logger
@@ -127,10 +128,19 @@ class SearchEngine:
             if not validate_listing(link):
                 continue
 
+            
+
 
 
             text = '\n'.join(link.stripped_strings)
             lines = text.split('\n')
+
+            # Extract location
+            location = lines[-1]
+
+            distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
+            if distance > search.radius:
+                continue
 
             # Regular expression to find numeric values
             numeric_pattern = re.compile(r'\d[\d,.]*')
@@ -151,8 +161,7 @@ class SearchEngine:
             # Extract title
             title = lines[-2]
 
-            # Extract location
-            location = lines[-1]
+
 
 
             url = f"https://facebook.com{link.get('href')}"
@@ -165,14 +174,10 @@ class SearchEngine:
                 continue
             logger.info("Quality validated")
 
-            response = await asyncio.to_thread(chatgpt.responses.create, 
-            model="gpt-4.1-mini",
-            input=f"Roughly how far is {search.city} from {location}? Format as `X mins (Y miles)`, no other words or text.")
-            distance = response.output_text
 
             product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, distance)
+            await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, f"{distance} mi ({duration})")
             cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
         return products
