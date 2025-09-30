@@ -140,6 +140,7 @@ class SearchEngine:
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
+                logger.info(f"Skipping listing because it is outside of radius ({location} - {distance} mi)")
                 continue
 
             # Regular expression to find numeric values
@@ -177,7 +178,7 @@ class SearchEngine:
 
             product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, f"{distance} mi ({duration})")
+            await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, f"{round(distance)} mi ({duration})")
             cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
         return products

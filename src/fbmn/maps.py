@@ -5,7 +5,7 @@ import os
 load_dotenv()
 MAPS_KEY = os.getenv('GOOGLE_MAPS_KEY')
 
-async def get_distance_and_duration(origin: str, destination: str):
+async def get_distance_and_duration(origin: str, destination: str) -> tuple[float, str]:
     base_url = "https://maps.googleapis.com/maps/api/distancematrix/json"
 
     params = {
