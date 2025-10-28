@@ -9,13 +9,6 @@ from fbmn.logger import logger
 GUILD_ID = discord.Object(1411757356894650381)
 
 
-
-
-
-
-
-
-
 class Client(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix=command_prefix, intents=intents)
@@ -71,7 +64,7 @@ class Commands(commands.Cog):
     async def list(self, interaction: discord.Interaction):
         _list = ""
         for search in self.bot.db.get_all_objects():
-            _list += f"\n{search.id}. {search.terms}"
+            _list += f"\n`{search.id}.` {search.terms}"
 
         if len(_list) >= 1:
             await interaction.response.send_message(_list)
