@@ -5,6 +5,11 @@ from fbmn.search_config import SearchConfig
 from fbmn.site_check import SearchEngine
 from fbmn.logger import logger
 import os
+import random
+import string
+
+def randchar():
+    return random.choice(string.ascii_lowercase)
 
 
 FILE_PATH = os.getenv('FILE_PATH')
@@ -57,8 +62,14 @@ class Commands(commands.Cog):
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(self, interaction: discord.Interaction, terms: str, target_price: str = "", context: str = "", city_code: str = '107976589222439', days_listed: int = 1, radius: int = 30, channel_id: str | None = None):
         try:
+            formatted_terms = tuple([term.strip() for term in terms.split(",")])
+            id = formatted_terms[0].replace(" ", "_")
 
-            config = SearchConfig(self.bot.db.get_all_objects().__len__() + 1, tuple([term.strip() for term in terms.split(",")]), int(channel_id) if channel_id else 1412121636815241397, target_price=target_price, context=context, city_code=city_code, days_listed=days_listed, radius=radius)
+            for object in self.bot.db.get_all_objects():
+                if object.id == id:
+                    id = id + "_"
+
+            config = SearchConfig(id, formatted_terms, int(channel_id) if channel_id else 1412121636815241397, target_price=target_price, context=context, city_code=city_code, days_listed=days_listed, radius=radius)
             self.bot.db.add_object(config)
             self.engine.searches = self.bot.db.get_all_objects()
             await interaction.response.send_message(f"Added search: {repr(config)}")
@@ -77,7 +88,7 @@ class Commands(commands.Cog):
         await interaction.response.send_message("No watches searches")
 
     @discord.app_commands.command(name="unwatch", description="Remove watched listing.")
-    async def unwatch(self, interaction: discord.Interaction, id: int):
+    async def unwatch(self, interaction: discord.Interaction, id: str):
         for search in self.bot.db.get_all_objects():
             logger.debug(f"Found SearchConfig: $M${print(repr(search))}")
 

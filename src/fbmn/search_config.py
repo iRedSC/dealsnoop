@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SearchConfig:
-    id: int
+    id: str
     terms: tuple[str, ...]
     channel: int
     city_code: str = '107976589222439'
