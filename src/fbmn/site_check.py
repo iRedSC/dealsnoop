@@ -1,4 +1,6 @@
 import asyncio
+import subprocess
+import sys
 import tempfile
 import chromedriver_autoinstaller
 from discord.ext import tasks
@@ -28,13 +30,27 @@ options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
 options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
 
-chromedriver_autoinstaller.install()
+
+def install_chromedriver():
+    driver_url = os.getenv("CHROMEDRIVER_URL")
+
+    if driver_url:
+        # Manual install using the Chrome for Testing endpoints
+        print(f"Installing ChromeDriver manually from {driver_url}")
+        subprocess.run([sys.executable, "-m", "chromedriver_autoinstaller", "--download", driver_url], check=False)
+    else:
+        chromedriver_autoinstaller.install()
+
+install_chromedriver()
 
 load_dotenv()
 API_KEY = os.getenv('OPENAI_KEY')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+FILE_PATH = os.getenv('FILE_PATH')
+if not FILE_PATH:
+    FILE_PATH = ""
 
-cache = Cache("/data/cache.txt")
+cache = Cache(f"{FILE_PATH}/cache.txt")
 
 chatgpt = OpenAI(api_key=API_KEY)
 

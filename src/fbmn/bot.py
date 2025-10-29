@@ -4,7 +4,12 @@ from fbmn.pickler import ObjectStore
 from fbmn.search_config import SearchConfig
 from fbmn.site_check import SearchEngine
 from fbmn.logger import logger
+import os
 
+
+FILE_PATH = os.getenv('FILE_PATH')
+if not FILE_PATH:
+    FILE_PATH = ""
 
 GUILD_ID = discord.Object(1411757356894650381)
 
@@ -12,7 +17,7 @@ GUILD_ID = discord.Object(1411757356894650381)
 class Client(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix=command_prefix, intents=intents)
-        self.db = ObjectStore("/data/searches.pkl")
+        self.db = ObjectStore(f"{FILE_PATH}/searches.pkl")
         self.engine = SearchEngine(self, self.db.get_all_objects())
 
     async def setup_hook(self) -> None:
