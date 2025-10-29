@@ -17,7 +17,7 @@ GUILD_ID = discord.Object(1411757356894650381)
 class Client(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix=command_prefix, intents=intents)
-        self.db = ObjectStore(f"{FILE_PATH}/searches.pkl")
+        self.db = ObjectStore(f"{FILE_PATH}searches.pkl")
         self.engine = SearchEngine(self, self.db.get_all_objects())
 
     async def setup_hook(self) -> None:

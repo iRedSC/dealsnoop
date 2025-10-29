@@ -50,7 +50,7 @@ FILE_PATH = os.getenv('FILE_PATH')
 if not FILE_PATH:
     FILE_PATH = ""
 
-cache = Cache(f"{FILE_PATH}/cache.txt")
+cache = Cache(f"{FILE_PATH}cache.txt")
 
 chatgpt = OpenAI(api_key=API_KEY)
 
