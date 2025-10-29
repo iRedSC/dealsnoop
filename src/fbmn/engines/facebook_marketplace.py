@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import chromedriver_autoinstaller
+import discord
 from discord.ext import tasks
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -15,8 +16,9 @@ import random
 from openai import OpenAI
 from dotenv import load_dotenv
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Optional, Protocol
 
+from fbmn.bot import Client
 from fbmn.maps import get_distance_and_duration
 from fbmn.search_config import SearchConfig
 from fbmn.listing_cache import Cache
@@ -59,7 +61,7 @@ chatgpt = OpenAI(api_key=API_KEY)
 
 
 class Bot(Protocol):
-    async def send_embed(self, channel_id: int, title: str, description: str, img: str, url: str, location: str, date: str, distance: str) -> None:
+    async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
         ...
 
 @dataclass
@@ -73,13 +75,14 @@ class Product:
     img: str
 
 
-class SearchEngine:
-    def __init__(self, bot: Bot, searches: set[SearchConfig]):
+class FacebookEngine:
+    bot: Optional[Client]
+
+    def __init__(self):
         self.browser = webdriver.Chrome(
         options=options,
         )
-        self.bot = bot
-        self.searches = searches
+
 
     async def get_product_info(self, url: str) -> tuple[str, str]:
         await asyncio.to_thread(self.browser.get, url)
@@ -194,16 +197,30 @@ class SearchEngine:
 
             product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            await self.bot.send_embed(search.channel, product.title, f"$**{product.price}**\n\n{product.description}", product.img, product.url, product.location, product.date, f"{round(distance)} mi ({duration})")
+
+            embed = discord.Embed(title=product.title, url=product.url, description=f"$**{product.price}**\n\n{product.description}", color=0x03b2f8)
+            embed.set_author(name=f"{product.date}", url=product.url, icon_url="https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353")
+
+            embed.set_thumbnail(url=product.img)
+            embed.set_footer(text=f"{product.location} — {round(distance)} mi ({duration})", icon_url="https://cdn-icons-png.flaticon.com/512/1076/1076983.png")
+
+            if self.bot:
+                await self.bot.send_embed(embed, search.channel)
+            else:
+                logger.error("No bot attached to engine, cannot send embed.")
+
             cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
         return products
     
     @tasks.loop(minutes=5.0)
-    async def check_sites(self):
+    async def event_loop(self):
         logger.info("$G$Checking sites")
 
-        for search in self.searches:
+        if not self.bot:
+            return
+
+        for search in self.bot.searches.get_all_objects():
             await self.perform_search(search, "creation_time_descend")
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")
