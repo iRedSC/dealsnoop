@@ -159,7 +159,7 @@ class FacebookEngine:
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
-                logger.info(f"Skipping listing because it is outside of radius ({location} - {distance} mi)")
+                logger.info(f"Skipping listing because it is outside of radius ({location} - {round(distance)} mi)")
                 continue
 
             # Regular expression to find numeric values

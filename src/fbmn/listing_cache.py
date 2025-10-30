@@ -66,7 +66,7 @@ class Cache:
         """
         logger.info(f"Searching for url in cache: $M$ {url}")
         in_cache = url.strip() in self.urls
-        logger.info(in_cache)
+        logger.info(f"Url found in cache: $M$ {url}")
         return in_cache
 
     def flush(self, x: int):

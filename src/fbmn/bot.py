@@ -86,7 +86,7 @@ class Commands(commands.Cog):
     async def list(self, interaction: discord.Interaction):
         _list = ""
         for search in self.bot.searches.get_all_objects():
-            _list += f"\n`{search.id}.` {search.terms}"
+            _list += f"\n`{search.id}` {search.terms}"
 
         if len(_list) >= 1:
             await interaction.response.send_message(_list)

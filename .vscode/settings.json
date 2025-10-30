@@ -1,0 +1,10 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        ".beet_cache": true,
+        "**/.vscode": true,
+        "**/__pycache__": true
+    }
+}
