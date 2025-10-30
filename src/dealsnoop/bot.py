@@ -3,9 +3,9 @@ from typing import Optional, Protocol
 from discord.ext import commands
 from discord.ext.tasks import Loop
 import discord
-from fbmn.pickler import ObjectStore
-from fbmn.search_config import SearchConfig
-from fbmn.logger import logger
+from dealsnoop.pickler import ObjectStore
+from dealsnoop.search_config import SearchConfig
+from dealsnoop.logger import logger
 import os
 import random
 import string

@@ -1,7 +1,7 @@
 import aiohttp
 from dotenv import load_dotenv
 import os
-from fbmn.logger import logger
+from dealsnoop.logger import logger
 
 load_dotenv()
 MAPS_KEY = os.getenv('GOOGLE_MAPS_KEY')

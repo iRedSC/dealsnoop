@@ -18,11 +18,11 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from fbmn.bot import Client
-from fbmn.maps import get_distance_and_duration
-from fbmn.search_config import SearchConfig
-from fbmn.listing_cache import Cache
-from fbmn.logger import logger
+from dealsnoop.bot import Client
+from dealsnoop.maps import get_distance_and_duration
+from dealsnoop.search_config import SearchConfig
+from dealsnoop.listing_cache import Cache
+from dealsnoop.logger import logger
 
 options = Options()
 options.add_argument("--headless=new")

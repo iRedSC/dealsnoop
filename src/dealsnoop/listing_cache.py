@@ -1,6 +1,6 @@
 import os
 from typing import Set
-from fbmn.logger import logger
+from dealsnoop.logger import logger
 
 class Cache:
     def __init__(self, cache_file_path: str):

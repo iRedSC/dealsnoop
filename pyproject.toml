@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "facebook-marketplace-notifier"
+name = "dealsnoop"
 version = "0.1.0"
 description = ""
 authors = [
@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 
-packages = [{ include = "fbmn", from = "src" }]
+packages = [{ include = "dealsnoop", from = "src" }]
 
 
 

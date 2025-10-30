@@ -1,6 +1,6 @@
 import pickle
 import os
-from fbmn.logger import logger
+from dealsnoop.logger import logger
 
 class ObjectStore:
     """

@@ -1,9 +1,9 @@
-from fbmn.bot import Client
+from dealsnoop.bot import Client
 from dotenv import load_dotenv
 import os
 
-from fbmn.pickler import ObjectStore
-from fbmn.engines import FacebookEngine
+from dealsnoop.pickler import ObjectStore
+from dealsnoop.engines import FacebookEngine
 
 
 load_dotenv()
