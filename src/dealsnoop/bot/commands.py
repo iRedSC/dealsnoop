@@ -1,70 +1,31 @@
 from __future__ import annotations
-from typing import Optional, Protocol
-from discord.ext import commands
-from discord.ext.tasks import Loop
-import discord
+from typing import Protocol
 from dealsnoop.pickler import ObjectStore
 from dealsnoop.search_config import SearchConfig
+from discord.ext import commands
+import discord
 from dealsnoop.logger import logger
-import os
-import random
-import string
-
-def randchar():
-    return random.choice(string.ascii_lowercase)
-
-
-FILE_PATH = os.getenv('FILE_PATH')
-if not FILE_PATH:
-    FILE_PATH = ""
 
 GUILD_ID = discord.Object(1411757356894650381)
 
-class Engine(Protocol):
-    bot: Optional[Client]
-    event_loop: Loop
+class Client(Protocol):
+    searches: ObjectStore
 
-intents = discord.Intents.default()
-intents.message_content = True
-
-class Client(commands.Bot):
-    engines: set[Engine]
-
-    def __init__(self, searches: ObjectStore):
-        super().__init__(command_prefix="!@#", intents=intents)
-        self.searches = searches
-        self.engines = set()
-    
-    def register_engine(self, engine: Engine):
-        self.engines.add(engine)
-        engine.bot = self
-
-    async def setup_hook(self) -> None:
-        await self.add_cog(Commands(self))
-        logger.info("$G$Command Cog added")
-        await self.tree.sync(guild=GUILD_ID)
-        logger.info("$G$Command tree synced")
-
-    async def on_ready(self):
-        for engine in self.engines:
-            engine.event_loop.start()
-        logger.info("$G$Bot started successfully.")
-
-    async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
-        channel = self.get_channel(channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            return
-        await channel.send(embed=embed) 
+    async def register_cog(self, cog: Commands):
+        ...
 
 
 class Commands(commands.Cog):
     def __init__(self, bot: Client):
         self.bot = bot
+        self.commands = [
+            getattr(self, name)
+            for name in dir(self)
+            if isinstance(getattr(self, name), discord.app_commands.Command)
+        ]
 
     async def cog_load(self):
-        self.bot.tree.add_command(self.watch, guild=GUILD_ID)
-        self.bot.tree.add_command(self.list, guild=GUILD_ID)
-        self.bot.tree.add_command(self.unwatch, guild=GUILD_ID)
+        await self.bot.register_cog(self)
 
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(self, interaction: discord.Interaction, terms: str, target_price: str = "", context: str = "", city_code: str = '107976589222439', days_listed: int = 1, radius: int = 30, channel_id: str | None = None):
@@ -105,8 +66,3 @@ class Commands(commands.Cog):
                 return
 
         await interaction.response.send_message(f"ID not found.")
-
-
-
-
-
