@@ -1,69 +1,25 @@
 import asyncio
-import subprocess
-import sys
-import tempfile
-import chromedriver_autoinstaller
 import discord
 from discord.ext import tasks
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
-import os
+
 from bs4 import BeautifulSoup
 import re
 import random
-from openai import OpenAI
-from dotenv import load_dotenv
+
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
 from dealsnoop.bot import Client
+from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
 from dealsnoop.maps import get_distance_and_duration
 from dealsnoop.search_config import SearchConfig
-from dealsnoop.listing_cache import Cache
 from dealsnoop.logger import logger
-
-options = Options()
-options.add_argument("--headless=new")
-options.add_argument("--headless=new")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
-options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
-
-
-def install_chromedriver():
-    driver_url = os.getenv("CHROMEDRIVER_URL")
-
-    if driver_url:
-        # Manual install using the Chrome for Testing endpoints
-        print(f"Installing ChromeDriver manually from {driver_url}")
-        subprocess.run([sys.executable, "-m", "chromedriver_autoinstaller", "--download", driver_url], check=False)
-    else:
-        chromedriver_autoinstaller.install()
-
-install_chromedriver()
-
-load_dotenv()
-API_KEY = os.getenv('OPENAI_KEY')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-FILE_PATH = os.getenv('FILE_PATH')
-if not FILE_PATH:
-    FILE_PATH = ""
-
-cache = Cache(f"{FILE_PATH}cache.txt")
-
-chatgpt = OpenAI(api_key=API_KEY)
-
-
-
-
-
 class Bot(Protocol):
     async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
         ...
-
 @dataclass
 class Product:
     price: float
@@ -79,9 +35,9 @@ class FacebookEngine:
     bot: Optional[Client]
 
     def __init__(self):
-        self.browser = webdriver.Chrome(
-        options=options,
-        )
+        self.browser = get_browser()
+        self.cache = get_cache("facebook")
+        self.chatgpt = get_chatgpt()
 
 
     async def get_product_info(self, url: str) -> tuple[str, str]:
@@ -144,7 +100,7 @@ class FacebookEngine:
         # &minPrice={search.min_price}&maxPrice={search.max_price}
         links = await self.gather_listings(search, sort)
         for link in links:
-            if not validate_listing(link):
+            if not self.validate_listing(link):
                 continue
 
             
@@ -190,7 +146,7 @@ class FacebookEngine:
             logger.info("Got date and description")
 
             
-            if not await validate_quality(title, search.terms, search.target_price, price, description, search.context):
+            if not await self.validate_quality(title, search.terms, search.target_price, price, description, search.context):
                 continue
             logger.info("Quality validated")
 
@@ -209,7 +165,7 @@ class FacebookEngine:
             else:
                 logger.error("No bot attached to engine, cannot send embed.")
 
-            cache.save_cache()
+            self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
         return products
     
@@ -225,48 +181,48 @@ class FacebookEngine:
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")
             await asyncio.sleep(5)
-        if len(cache.urls) >= 2000:
-            cache.flush(1000)
+        if len(self.cache.urls) >= 2000:
+            self.cache.flush(1000)
 
-def validate_listing(link):
-    img_tag = link.find('img')
-    if (img_tag == None) or (img_tag and 'alt' not in img_tag.attrs):
-        return False
-    
-    id = re.sub(r"/marketplace/item/(\d+)", r"\1", link.get('href'))
-    id = re.sub(r'/.*', '', id)
-    if cache.contains(id):
-        logger.info("Hit listing in cache, skipping")
-        return False
-    cache.add_url(id)
-    return True
+    def validate_listing(self, link):
+        img_tag = link.find('img')
+        if (img_tag == None) or (img_tag and 'alt' not in img_tag.attrs):
+            return False
+        
+        id = re.sub(r"/marketplace/item/(\d+)", r"\1", link.get('href'))
+        id = re.sub(r'/.*', '', id)
+        if self.cache.contains(id):
+            logger.info("Hit listing in cache, skipping")
+            return False
+        self.cache.add_url(id)
+        return True
 
-async def validate_quality(title, product, target_price, price, description, context):
-    logger.info("Validating listing quality")
-    if not target_price:
-        target_price = "(no max price)"
-    response = await asyncio.to_thread(chatgpt.responses.create,
-    model="gpt-4.1-mini",
-    input=f"""
-Think it through shortly, then answer with || and 'True' or 'False'. If and once you determine false, stop the thought process and return false.
+    async def validate_quality(self, title, product, target_price, price, description, context):
+        logger.info("Validating listing quality")
+        if not target_price:
+            target_price = "(no max price)"
+        response = await asyncio.to_thread(self.chatgpt.responses.create,
+        model="gpt-4.1-mini",
+        input=f"""
+    Think it through shortly, then answer with || and 'True' or 'False'. If and once you determine false, stop the thought process and return false.
 
-Example: "<your thoughts> || True"
+    Example: "<your thoughts> || True"
 
-I am searching for '{product}', for a rough max price of {target_price} (can be slightly higher).
-Additional Context: '{context}'.
+    I am searching for '{product}', for a rough max price of {target_price} (can be slightly higher).
+    Additional Context: '{context}'.
 
-Here is the listing:
-```
-{title}
-{description}
-```
-Is the listing what I'm looking for, and is {price} a good price for it?
-If the listing is above the max price but is a very good deal anyway, respond True; only do this if the listing is actually what is being looked for.
-""")
-    logger.info(f"{response.output_text.split("|| ")[0]}")
-    
-    if response.output_text.split("|| ")[-1].lower() != 'true':
-        return
-    
-    return True
+    Here is the listing:
+    ```
+    {title}
+    {description}
+    ```
+    Is the listing what I'm looking for, and is {price} a good price for it?
+    If the listing is above the max price but is a very good deal anyway, respond True; only do this if the listing is actually what is being looked for.
+    """)
+        logger.info(f"{response.output_text.split("|| ")[0]}")
+        
+        if response.output_text.split("|| ")[-1].lower() != 'true':
+            return
+        
+        return True
 
