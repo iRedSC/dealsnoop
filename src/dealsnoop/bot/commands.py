@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Protocol
+from dealsnoop.bot.embeds import search_config_embed
 from dealsnoop.pickler import ObjectStore
 from dealsnoop.search_config import SearchConfig
 from discord.ext import commands
@@ -39,7 +40,8 @@ class Commands(commands.Cog):
 
             config = SearchConfig(id, formatted_terms, int(channel_id) if channel_id else 1412121636815241397, target_price=target_price, context=context, city_code=city_code, days_listed=days_listed, radius=radius)
             self.bot.searches.add_object(config)
-            await interaction.response.send_message(f"Added search: {repr(config)}")
+            embed = search_config_embed(config)
+            await interaction.response.send_message(embed=embed)
         except ValueError:
             await interaction.response.send_message(f"ERRROR: Channel ID not a number.")
 
