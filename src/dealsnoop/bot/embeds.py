@@ -14,8 +14,9 @@ def product_embed(product: Product, distance: Optional[float], duration: Optiona
     return embed
 
 def search_config_embed(config: SearchConfig):
-    embed = discord.Embed(title=config.id, description=f"Terms: {", ".join([term for term in config.terms])}", color=0x03b2f8)
+    embed = discord.Embed(title=f"Successfully added search: {config.id}", color=0x03b2f8)
     # embed.set_author(name=f"{product.date}",)
+    embed.add_field(name="Terms", value="\n".join([f"`{term}`" for term in config.terms]))
     embed.add_field(name="Channel", value=f"<#{config.channel}>")
     embed.add_field(name="City", value=config.city)
     embed.add_field(name="Target Price", value=f"${config.target_price}")

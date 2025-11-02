@@ -18,6 +18,7 @@ from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
 from dealsnoop.maps import get_distance_and_duration
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.logger import logger
+from dealsnoop.snoop import Snoop
 class Bot(Protocol):
     async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
         ...
@@ -25,9 +26,10 @@ class Bot(Protocol):
 
 
 class FacebookEngine:
-    bot: Optional[Client]
+    snoop: Snoop
 
-    def __init__(self):
+    def __init__(self, snoop):
+        self.snoop = snoop
         self.browser = get_browser()
         self.cache = get_cache("facebook")
         self.chatgpt = get_chatgpt()
@@ -149,10 +151,8 @@ class FacebookEngine:
 
             embed = product_embed(product, distance, duration)
             
-            if self.bot:
-                await self.bot.send_embed(embed, search.channel)
-            else:
-                logger.error("No bot attached to engine, cannot send embed.")
+
+            await self.snoop.bot.send_embed(embed, search.channel)
 
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
@@ -162,10 +162,8 @@ class FacebookEngine:
     async def event_loop(self):
         logger.info("$G$Checking sites")
 
-        if not self.bot:
-            return
 
-        for search in self.bot.searches.get_all_objects():
+        for search in self.snoop.searches.get_all_objects():
             await self.perform_search(search, "creation_time_descend")
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")

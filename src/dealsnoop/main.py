@@ -2,8 +2,10 @@ from dealsnoop.bot.client import Client
 from dotenv import load_dotenv
 import os
 
+from dealsnoop.bot.commands import Commands
 from dealsnoop.pickler import ObjectStore
 from dealsnoop.engines import FacebookEngine
+from dealsnoop.snoop import Snoop
 
 
 load_dotenv()
@@ -15,9 +17,11 @@ if not FILE_PATH:
 
 searches = ObjectStore(f"{FILE_PATH}searches.pkl")
 
+bot = Client()
+snoop = Snoop(bot, searches)
 
-bot = Client(searches)
 
-bot.register_engine(FacebookEngine())
+bot.register_cog(Commands(snoop))
+snoop.register_engine(FacebookEngine(snoop))
 
 bot.run(token=BOT_TOKEN) # type: ignore
