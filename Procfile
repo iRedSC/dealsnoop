@@ -1,1 +1,1 @@
-worker: /opt/venv/bin/python -m fbmn.main
+worker: /opt/venv/bin/python -m dealsnoop.main
