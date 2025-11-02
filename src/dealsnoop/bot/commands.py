@@ -25,9 +25,6 @@ class Commands(commands.Cog):
             if isinstance(getattr(self, name), discord.app_commands.Command)
         ]
 
-    async def cog_load(self):
-        await self.bot.register_cog(self)
-
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(self, interaction: discord.Interaction, terms: str, target_price: str = "", context: str = "", city_code: str = '107976589222439', days_listed: int = 1, radius: int = 30, channel_id: str | None = None):
         try:

@@ -36,13 +36,13 @@ class Client(commands.Bot):
 
     async def register_cog(self, cog: Commands):
         logger.info("Registering Commands")
-        await self.add_cog(Commands(self))
+        await self.add_cog(cog)
         for command in cog.commands:
             self.tree.add_command(command, guild=GUILD_ID)
             logger.info(f"Added command {command.name}")
 
     async def setup_hook(self) -> None:
-        
+        await self.register_cog(Commands(self))
         logger.info("$G$Command Cog added")
         await self.tree.sync(guild=GUILD_ID)
         logger.info("$G$Command tree synced")
