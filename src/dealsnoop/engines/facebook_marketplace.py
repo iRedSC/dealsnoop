@@ -9,10 +9,11 @@ from bs4 import BeautifulSoup
 import re
 import random
 
-from dataclasses import dataclass
+from dealsnoop.bot.embeds import product_embed
+from dealsnoop.product import Product
 from typing import Optional, Protocol
 
-from dealsnoop.bot import Client
+from dealsnoop.bot.client import Client
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
 from dealsnoop.maps import get_distance_and_duration
 from dealsnoop.search_config import SearchConfig
@@ -20,15 +21,7 @@ from dealsnoop.logger import logger
 class Bot(Protocol):
     async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
         ...
-@dataclass
-class Product:
-    price: float
-    title: str
-    description: str
-    location: str
-    date: str
-    url: str
-    img: str
+
 
 
 class FacebookEngine:
@@ -154,12 +147,8 @@ class FacebookEngine:
             product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
 
-            embed = discord.Embed(title=product.title, url=product.url, description=f"$**{product.price}**\n\n{product.description}", color=0x03b2f8)
-            embed.set_author(name=f"{product.date}", url=product.url, icon_url="https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353")
-
-            embed.set_thumbnail(url=product.img)
-            embed.set_footer(text=f"{product.location} — {round(distance)} mi ({duration})", icon_url="https://cdn-icons-png.flaticon.com/512/1076/1076983.png")
-
+            embed = product_embed(product, distance, duration)
+            
             if self.bot:
                 await self.bot.send_embed(embed, search.channel)
             else:

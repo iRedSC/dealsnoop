@@ -1,4 +1,4 @@
-from dealsnoop.bot import Client
+from dealsnoop.bot.client import Client
 from dotenv import load_dotenv
 import os
 
