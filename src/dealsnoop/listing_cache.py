@@ -68,6 +68,12 @@ class Cache:
         """Check if a URL is already in the cache."""
         return url.strip() in self.urls
 
+    def clear(self):
+        """Clears all URLs from the cache (in-memory and on disk)."""
+        self.urls.clear()
+        self.save_cache()
+        logger.info(f"Cache cleared: $M${self.cache_file_path}$W$")
+
     def flush(self, x: int):
         """
         Removes the first x lines (URLs) from the cache file 

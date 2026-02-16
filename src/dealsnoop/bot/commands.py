@@ -88,6 +88,18 @@ class Commands(commands.Cog):
                 return
         await interaction.response.send_message("ID not found.")
 
+    @discord.app_commands.command(name="clearcache", description="Clear the listing cache so previously seen listings can be notified again.")
+    async def clearcache(self, interaction: discord.Interaction) -> None:
+        cleared = 0
+        for engine in self.snoop.engines:
+            if hasattr(engine, "cache"):
+                engine.cache.clear()
+                cleared += 1
+        if cleared:
+            await interaction.response.send_message(f"Cleared cache for {cleared} engine(s).")
+        else:
+            await interaction.response.send_message("No caches to clear.")
+
     @discord.app_commands.command(name="forcesearch", description="Run all watched searches immediately, bypassing the timer.")
     async def forcesearch(self, interaction: discord.Interaction) -> None:
         if not self.snoop.searches.get_all_objects():
