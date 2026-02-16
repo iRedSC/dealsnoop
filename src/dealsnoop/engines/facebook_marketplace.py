@@ -100,7 +100,10 @@ class FacebookEngine:
         for link in links:
             passed, skip_reason = self.validate_listing(link)
             if not passed:
-                collector.add_skipped(self._title_from_link(link), skip_reason or "Unknown")
+                # Only log "Cache hit" - real listings we've seen. Skip logging "Invalid listing"
+                # (no img/alt/href) since those are page chrome (Terms, Help, Settings, etc.).
+                if skip_reason == "Cache hit":
+                    collector.add_skipped(self._title_from_link(link), skip_reason)
                 continue
 
             text = '\n'.join(link.stripped_strings)
