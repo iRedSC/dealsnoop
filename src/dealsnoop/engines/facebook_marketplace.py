@@ -155,11 +155,16 @@ class FacebookEngine:
             await asyncio.sleep(random.randint(1, 4))
         return products
     
+    async def run_search_now(self) -> None:
+        """Run search immediately for all watched searches, bypassing the timer."""
+        await self._run_searches()
+
     @tasks.loop(minutes=5.0)
     async def event_loop(self):
+        await self._run_searches()
+
+    async def _run_searches(self) -> None:
         logger.info("$G$Checking sites")
-
-
         for search in self.snoop.searches.get_all_objects():
             await self.perform_search(search, "creation_time_descend")
             await asyncio.sleep(5)

@@ -87,3 +87,16 @@ class Commands(commands.Cog):
                 await interaction.response.send_message(f"Removed {search.terms} from watchlist")
                 return
         await interaction.response.send_message("ID not found.")
+
+    @discord.app_commands.command(name="forcesearch", description="Run all watched searches immediately, bypassing the timer.")
+    async def forcesearch(self, interaction: discord.Interaction) -> None:
+        if not self.snoop.searches.get_all_objects():
+            await interaction.response.send_message("No watched searches. Add one with `/watch` first.")
+            return
+        await interaction.response.defer()
+        try:
+            await self.snoop.run_search_now()
+            await interaction.followup.send("Search complete.")
+        except Exception as e:
+            logger.exception("Forcesearch failed")
+            await interaction.followup.send(f"Search failed: {e}")

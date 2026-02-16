@@ -14,6 +14,7 @@ class Engine(Protocol):
     snoop: Snoop
     event_loop: Loop
 
+    async def run_search_now(self) -> None: ...
 
 
 class Snoop:
@@ -31,6 +32,11 @@ class Snoop:
     def register_engine(self, engine: Engine):
         self.engines.add(engine)
         engine.snoop = self
+
+    async def run_search_now(self) -> None:
+        """Run all engine searches immediately, bypassing the timer."""
+        for engine in self.engines:
+            await engine.run_search_now()
 
     async def on_ready(self):
         for engine in self.engines:
