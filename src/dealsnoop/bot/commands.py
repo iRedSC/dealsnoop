@@ -113,11 +113,7 @@ class Commands(commands.Cog):
             logger.exception("Forcesearch failed")
             await interaction.followup.send(f"Search failed: {e}")
 
-    @discord.app_commands.group(name="searchfeed", description="Configure the listing feed channel.")
-    async def searchfeed(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(
-            "Use `/searchfeed setchannel <#channel>` to set the feed, or `none` to clear."
-        )
+    searchfeed = discord.app_commands.Group(name="searchfeed", description="Configure the listing feed channel.")
 
     @searchfeed.command(name="setchannel", description="Set or clear the channel where listing feed (kept/skipped) is posted.")
     async def searchfeed_setchannel(
