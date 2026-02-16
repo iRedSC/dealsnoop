@@ -138,7 +138,8 @@ class FacebookEngine:
             logger.info("Got date and description")
 
             
-            if not await self.validate_quality(title, search.terms, search.target_price, price, description, search.context):
+            passed, thought_trace = await self.validate_quality(title, search.terms, search.target_price, price, description, search.context)
+            if not passed:
                 continue
             logger.info("Quality validated")
 
@@ -147,9 +148,8 @@ class FacebookEngine:
             products.append(product)
 
             embed = product_embed(product, distance, duration)
-            
 
-            await self.snoop.bot.send_embed(embed, search.channel)
+            await self.snoop.bot.send_embed(embed, search.channel, thought_trace=thought_trace)
 
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
@@ -200,7 +200,8 @@ class FacebookEngine:
         price: float,
         description: str,
         context: str | None,
-    ) -> bool:
+    ) -> tuple[bool, str]:
+        """Returns (passed, thought_trace)."""
         logger.info("Validating listing quality")
         if not target_price:
             target_price = "(no max price)"
@@ -222,9 +223,9 @@ class FacebookEngine:
     Is the listing what I'm looking for, and is {price} a good price for it?
     If the listing is above the max price but is a very good deal anyway, respond True; only do this if the listing is actually what is being looked for.
     """)
-        logger.info(f"{response.output_text.split("|| ")[0]}")
-        
-        if response.output_text.split("|| ")[-1].lower() != "true":
-            return False
-        return True
+        parts = response.output_text.split("|| ")
+        thought_trace = parts[0].strip() if parts else ""
+        passed = len(parts) > 1 and parts[-1].lower() == "true"
+        logger.info(thought_trace)
+        return (passed, thought_trace)
 

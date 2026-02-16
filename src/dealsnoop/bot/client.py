@@ -40,11 +40,21 @@ class Client(commands.Bot):
     async def on_ready(self) -> None:
         ...
 
-    async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
+    async def send_embed(
+        self,
+        embed: discord.Embed,
+        channel_id: int,
+        thought_trace: str | None = None,
+    ) -> None:
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
-        await channel.send(embed=embed)
+        view = None
+        if thought_trace:
+            from dealsnoop.bot.views import ThoughtTraceView
+
+            view = ThoughtTraceView(thought_trace)
+        await channel.send(embed=embed, view=view)
 
 
 
