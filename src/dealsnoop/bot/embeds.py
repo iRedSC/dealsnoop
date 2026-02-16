@@ -35,16 +35,19 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
-def _listing_accessory(entry: ListingLog) -> discord.ui.Button | discord.ui.Thumbnail:
-    """Button (View listing) when url exists, else Thumbnail as placeholder."""
+_PLACEHOLDER_IMG = "https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353"
+
+
+def _listing_accessory(entry: ListingLog) -> discord.ui.Thumbnail:
+    """Thumbnail from entry.img, or placeholder when missing."""
+    return discord.ui.Thumbnail(entry.img or _PLACEHOLDER_IMG)
+
+
+def _listing_content(content: str, entry: ListingLog) -> str:
+    """Append [View listing](url) link when url exists."""
     if entry.url:
-        return discord.ui.Button(
-            label="View listing",
-            url=entry.url,
-            style=discord.ButtonStyle.link,
-        )
-    img = entry.img or "https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353"
-    return discord.ui.Thumbnail(img)
+        return f"{content}\n\n[View listing]({entry.url})"
+    return content
 
 
 def grouped_listing_feed_layout(
@@ -74,7 +77,7 @@ def grouped_listing_feed_layout(
     for entry in others:
         title = entry.title[:256] if len(entry.title) <= 256 else entry.title[:253] + "..."
         reason = entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "..."
-        content = f"**{title}**\n{reason}"
+        content = _listing_content(f"**{title}**\n{reason}", entry)
         view.add_item(
             discord.ui.Container(
                 discord.ui.Section(
@@ -99,7 +102,7 @@ def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
     value = entry.reason
     if len(value) > FIELD_VALUE_LIMIT:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
-    content = f"**Search: {entry.search_id}**\n**{name}**\n{value}"
+    content = _listing_content(f"**Search: {entry.search_id}**\n**{name}**\n{value}", entry)
     accent_color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
 
     view = discord.ui.LayoutView()
