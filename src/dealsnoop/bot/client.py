@@ -34,6 +34,29 @@ class Client(commands.Bot):
             logger.info(f"Added command '{command.name}'")
 
     async def setup_hook(self) -> None:
+        @self.tree.context_menu(name="Show AI reasoning")
+        async def show_ai_reasoning(interaction: discord.Interaction, message: discord.Message) -> None:
+            cache = self._thought_trace_cache
+            thought_trace = cache.get(message.id)
+            if thought_trace is None:
+                await interaction.response.send_message(
+                    "No AI reasoning available for this message.",
+                    ephemeral=True,
+                )
+                return
+            max_desc = 4096
+            text = thought_trace
+            if len(text) > max_desc:
+                text = text[: max_desc - 3] + "..."
+            embed = discord.Embed(
+                title="AI thought trace",
+                description=text,
+                color=0x5865F2,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        self.tree.add_command(show_ai_reasoning, guild=GUILD)
+        logger.info("Added command 'Show AI reasoning'")
         for cog in self._unregistered_cogs:
             await self._register_cog(cog)
         await self.tree.sync(guild=GUILD)
