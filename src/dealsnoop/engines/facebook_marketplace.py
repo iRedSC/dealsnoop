@@ -94,8 +94,13 @@ class FacebookEngine:
 
     async def perform_search(self, search: SearchConfig, sort: str) -> list[Product]:
         products = []
-        collector = SearchLogCollector(search.id)
         feed_channel_id = self.snoop.searches.get_feed_channel_id()
+        collector = SearchLogCollector(
+            search.id,
+            bot=self.snoop.bot,
+            feed_channel_id=feed_channel_id,
+        )
+        collector.start()
 
         links = await self.gather_listings(search, sort)
         logger.info(f"$G${search.id}$W$: found {len(links)} links on page")
@@ -105,13 +110,13 @@ class FacebookEngine:
                 # Only log "Cache hit" - real listings we've seen. Skip logging "Invalid listing"
                 # (no img/alt/href) since those are page chrome (Terms, Help, Settings, etc.).
                 if skip_reason == "Cache hit":
-                    collector.add_skipped(self._title_from_link(link), skip_reason)
+                    collector.add_grouped(self._title_from_link(link), skip_reason)
                 continue
 
             text = '\n'.join(link.stripped_strings)
             lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
             if len(lines) < 2:
-                collector.add_skipped(self._title_from_link(link), "Malformed listing")
+                collector.add_grouped(self._title_from_link(link), "Malformed listing")
                 continue
 
             # Vehicle listings have extra line: [price, title, location, mileage]
@@ -128,7 +133,7 @@ class FacebookEngine:
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
-                collector.add_skipped(
+                collector.add_grouped(
                     title,
                     f"Outside radius ({location} - {round(distance)} mi)",
                 )
@@ -151,7 +156,7 @@ class FacebookEngine:
                 title, search.terms, search.target_price, price, description, search.context
             )
             if not passed:
-                collector.add_skipped(
+                collector.add_individual_skipped(
                     title,
                     f"Quality check failed: {thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}",
                     url=re.sub(r'\?.*', '', url),
@@ -161,7 +166,7 @@ class FacebookEngine:
 
             product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            collector.add_kept(title, "Matched", url=product.url, price=price)
+            collector.add_individual_kept(title, "Matched", url=product.url, price=price)
 
             embed = product_embed(product, distance, duration)
             await self.snoop.bot.send_embed(embed, search.channel, thought_trace=thought_trace)
@@ -169,7 +174,7 @@ class FacebookEngine:
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
 
-        await collector.flush(bot=self.snoop.bot, feed_channel_id=feed_channel_id)
+        await collector.flush()
         return products
     
     async def run_search_now(self) -> None:

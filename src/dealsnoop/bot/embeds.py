@@ -35,6 +35,52 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
+def grouped_listing_feed_embed(
+    search_id: str,
+    entries: Sequence[ListingLog],
+) -> discord.Embed:
+    """Build a single embed for cache hits and outside radius (grouped)."""
+    if not entries:
+        return discord.Embed(title="Search: " + search_id, color=0xFFA500)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    FIELD_NAME_LIMIT = 256
+    FIELD_VALUE_LIMIT = 1024
+    embed = discord.Embed(
+        title=f"Search: {search_id} — Cache hits & outside radius",
+        description=f"[{timestamp}] {len(entries)} skipped",
+        color=0xFFA500,
+    )
+    for entry in entries:
+        name = f"SKIPPED | {entry.title}"
+        if len(name) > FIELD_NAME_LIMIT:
+            name = name[: FIELD_NAME_LIMIT - 3] + "..."
+        value = entry.reason
+        if len(value) > FIELD_VALUE_LIMIT:
+            value = value[: FIELD_VALUE_LIMIT - 3] + "..."
+        embed.add_field(name=name, value=value, inline=False)
+    return embed
+
+
+def individual_listing_feed_embed(entry: ListingLog) -> discord.Embed:
+    """Build one embed for a single KEPT or SKIPPED entry (AI decisions)."""
+    FIELD_NAME_LIMIT = 256
+    FIELD_VALUE_LIMIT = 1024
+    color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
+    price_str = f" ${entry.price}" if entry.price is not None else ""
+    name = f"{entry.outcome.value} | {entry.title}{price_str}"
+    if len(name) > FIELD_NAME_LIMIT:
+        name = name[: FIELD_NAME_LIMIT - 3] + "..."
+    value = entry.reason
+    if len(value) > FIELD_VALUE_LIMIT:
+        value = value[: FIELD_VALUE_LIMIT - 3] + "..."
+    embed = discord.Embed(
+        title=f"Search: {entry.search_id}",
+        color=color,
+    )
+    embed.add_field(name=name, value=value, inline=False)
+    return embed
+
+
 def listing_feed_embeds(
     search_id: str,
     entries: Sequence[ListingLog],
