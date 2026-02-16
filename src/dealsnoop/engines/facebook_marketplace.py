@@ -76,6 +76,7 @@ class FacebookEngine:
         for term in search.terms:
             url = f'https://www.facebook.com/marketplace/{search.city_code}/search?query={term}&sortBy={sort}&daysSinceListed={search.days_listed}&exact=false&radius_in_km={search.radius}'
             await asyncio.to_thread(self.browser.get, url)
+            await asyncio.sleep(3)  # Allow JS to render (marketplace listings load dynamically)
             html = await asyncio.to_thread(lambda: self.browser.page_source)
             soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
             listings += soup.find_all('a')
@@ -97,6 +98,7 @@ class FacebookEngine:
         feed_channel_id = self.snoop.searches.get_feed_channel_id()
 
         links = await self.gather_listings(search, sort)
+        logger.info(f"$G${search.id}$W$: found {len(links)} links on page")
         for link in links:
             passed, skip_reason = self.validate_listing(link)
             if not passed:
@@ -179,8 +181,9 @@ class FacebookEngine:
         await self._run_searches()
 
     async def _run_searches(self) -> None:
-        logger.info("$G$Checking sites")
-        for search in self.snoop.searches.get_all_objects():
+        searches = self.snoop.searches.get_all_objects()
+        logger.info(f"$G$Checking sites ({len(searches)} search(es))")
+        for search in searches:
             await self.perform_search(search, "creation_time_descend")
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")
@@ -201,6 +204,8 @@ class FacebookEngine:
             return (False, "Invalid listing (no href)")
         listing_id = re.sub(r"/marketplace/item/(\d+)", r"\1", href)
         listing_id = re.sub(r"/.*", "", listing_id)
+        if not listing_id or not listing_id.isdigit():
+            return (False, "Invalid listing (not marketplace item)")
         if self.cache.contains(listing_id):
             return (False, "Cache hit")
         self.cache.add_url(listing_id)
