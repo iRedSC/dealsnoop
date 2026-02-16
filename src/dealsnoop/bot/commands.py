@@ -79,7 +79,23 @@ class Commands(commands.Cog):
         msg = "\n".join(lines) if lines else "No watched searches"
         await interaction.response.send_message(msg)
 
+    async def _unwatch_id_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[discord.app_commands.Choice[str]]:
+        """Autocomplete search IDs for the unwatch command."""
+        searches = self.snoop.searches.get_all_objects()
+        current_lower = current.lower()
+        choices = [
+            discord.app_commands.Choice(name=f"{s.id} — {', '.join(s.terms)}", value=s.id)
+            for s in searches
+            if not current_lower or current_lower in s.id.lower() or any(current_lower in t.lower() for t in s.terms)
+        ]
+        return choices[:25]  # Discord limit
+
     @discord.app_commands.command(name="unwatch", description="Remove watched listing.")
+    @discord.app_commands.autocomplete(id=_unwatch_id_autocomplete)
     async def unwatch(self, interaction: discord.Interaction, id: str) -> None:
         for search in self.snoop.searches.get_all_objects():
             if search.id == id:
