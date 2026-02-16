@@ -1,0 +1,60 @@
+---
+description: How to run and use the Dealsnoop Facebook Marketplace Discord notifier
+alwaysApply: true
+---
+
+# Dealsnoop System Usage
+
+## Overview
+
+Dealsnoop is a Discord bot that watches Facebook Marketplace for listings matching user-defined searches and posts matches to Discord channels.
+
+## Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `BOT_TOKEN` | Discord bot token from the Discord Developer Portal |
+| `DB_URL` | PostgreSQL connection URL, e.g. `postgresql://user:password@host:5432/dbname` |
+
+Optional: `FILE_PATH` (data file prefix), `GUILD_ID`, `DEFAULT_CHANNEL_ID` — see [config.py](src/dealsnoop/config.py).
+
+## Running the Bot
+
+```bash
+poetry install
+poetry run python -m dealsnoop
+```
+
+## Docker (Same Container Network)
+
+When running in Docker with Postgres on the same network, use the service name as host:
+
+```
+DB_URL=postgresql://user:password@postgres:5432/dealsnoop
+```
+
+See `docker-compose.yml` for a full setup.
+
+## Discord Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/watch` | Add a search: terms, target_price, context, city_code, days_listed, radius, channel_id |
+| `/list` | List all watched searches |
+| `/unwatch <id>` | Remove a search by id |
+
+## Code Layout
+
+| Path | Purpose |
+|------|---------|
+| `src/dealsnoop/main.py` | Entry point; wires bot, Snoop, engines, commands |
+| `src/dealsnoop/store.py` | PostgreSQL SearchStore (replaces pickle) |
+| `src/dealsnoop/snoop.py` | Orchestrates engines and Discord bot |
+| `src/dealsnoop/bot/commands.py` | Slash command handlers |
+| `src/dealsnoop/engines/facebook_marketplace.py` | Facebook Marketplace search engine |
+| `src/dealsnoop/search_config.py` | SearchConfig dataclass |
+
+## Database
+
+- Table `searches` is created automatically on startup (`CREATE TABLE IF NOT EXISTS`).
+- Search configs are persisted in PostgreSQL; no pickle files.

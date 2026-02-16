@@ -8,7 +8,6 @@ from discord.ext import commands  # type: ignore[import-untyped]
 from dealsnoop.bot.embeds import search_config_embed
 from dealsnoop.config import DEFAULT_CHANNEL_ID
 from dealsnoop.logger import logger
-from dealsnoop.pickler import ObjectStore
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
 

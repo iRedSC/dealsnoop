@@ -6,7 +6,7 @@ from typing import Protocol
 
 from dealsnoop.logger import logger
 from dealsnoop.bot.client import Client
-from dealsnoop.pickler import ObjectStore
+from dealsnoop.store import SearchStore
 from discord.ext.tasks import Loop  # type: ignore[import-untyped]
 
 
@@ -18,10 +18,10 @@ class Engine(Protocol):
 
 class Snoop:
     bot: Client
-    searches: ObjectStore
+    searches: SearchStore
     engines: set[Engine]
 
-    def __init__(self, bot: Client, searches: ObjectStore):
+    def __init__(self, bot: Client, searches: SearchStore):
         self.bot = bot
         self.bot.on_ready = self.on_ready
 
