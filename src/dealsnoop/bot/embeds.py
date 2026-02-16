@@ -76,9 +76,12 @@ def grouped_listing_feed_layout(
         reason = entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "..."
         content = f"**{title}**\n{reason}"
         view.add_item(
-            discord.ui.Section(
-                discord.ui.TextDisplay(content),
-                accessory=_listing_accessory(entry),
+            discord.ui.Container(
+                discord.ui.Section(
+                    discord.ui.TextDisplay(content),
+                    accessory=_listing_accessory(entry),
+                ),
+                accent_color=0xFFA500,
             )
         )
 
@@ -97,12 +100,16 @@ def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
     if len(value) > FIELD_VALUE_LIMIT:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
     content = f"**Search: {entry.search_id}**\n**{name}**\n{value}"
+    accent_color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
 
     view = discord.ui.LayoutView()
     view.add_item(
-        discord.ui.Section(
-            discord.ui.TextDisplay(content),
-            accessory=_listing_accessory(entry),
+        discord.ui.Container(
+            discord.ui.Section(
+                discord.ui.TextDisplay(content),
+                accessory=_listing_accessory(entry),
+            ),
+            accent_color=accent_color,
         )
     )
     return view
