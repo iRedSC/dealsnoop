@@ -36,19 +36,36 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 | `/watch` | Add a search: terms, target_price, context, city_code, days_listed, radius, channel_id |
 | `/list` | List all watched searches |
 | `/unwatch <id>` | Remove a search by id |
+| `/searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear |
+
+## Listing Feed
+
+The listing feed shows all processed listings (kept and skipped) with reasons. Enable it with `/searchfeed setchannel #channel`. Each search run produces embeds with: outcome (KEPT/SKIPPED), title, price (when available), and reason. Output goes to both the feed channel and the console log.
+
+## Listing Log Pattern
+
+Listing decisions use structured log objects ([listing_log.py](src/dealsnoop/listing_log.py)) instead of imperative `logger` calls:
+
+- **ListingLog**: `search_id`, `title`, `outcome` (KEPT/SKIPPED), `reason`, optional `url`/`price`
+- **SearchLogCollector**: accumulates entries per search; `add_kept()` / `add_skipped()`; `flush()` outputs to logger and Discord feed
+
+Imperative `logger` calls remain for non-listing operational logs (cache, browser, etc.).
 
 ## Code Layout
 
 | Path | Purpose |
 |------|---------|
 | `src/dealsnoop/main.py` | Entry point; wires bot, Snoop, engines, commands |
-| `src/dealsnoop/store.py` | PostgreSQL SearchStore (replaces pickle) |
+| `src/dealsnoop/store.py` | PostgreSQL SearchStore, bot_config (feed_channel_id) |
 | `src/dealsnoop/snoop.py` | Orchestrates engines and Discord bot |
+| `src/dealsnoop/listing_log.py` | ListingLog, SearchLogCollector |
 | `src/dealsnoop/bot/commands.py` | Slash command handlers |
+| `src/dealsnoop/bot/embeds.py` | product_embed, search_config_embed, listing_feed_embeds |
 | `src/dealsnoop/engines/facebook_marketplace.py` | Facebook Marketplace search engine |
 | `src/dealsnoop/search_config.py` | SearchConfig dataclass |
 
 ## Database
 
 - Table `searches` is created automatically on startup (`CREATE TABLE IF NOT EXISTS`).
+- Table `bot_config` stores key-value config (e.g. `feed_channel_id`).
 - Search configs are persisted in PostgreSQL; no pickle files.

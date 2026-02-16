@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS searches (
 );
 """
 
+BOT_CONFIG_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS bot_config (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -61,9 +68,10 @@ class SearchStore:
         return psycopg.connect(self._db_url, row_factory=dict_row)
 
     def _init_schema(self) -> None:
-        """Create the searches table if it does not exist."""
+        """Create the searches and bot_config tables if they do not exist."""
         with self._get_conn() as conn:
             conn.execute(CREATE_TABLE_SQL)
+            conn.execute(BOT_CONFIG_TABLE_SQL)
             conn.commit()
         logger.info("Database schema initialized.")
 
@@ -121,3 +129,37 @@ class SearchStore:
             conn.execute("TRUNCATE TABLE searches")
             conn.commit()
         logger.info("Store cleared.")
+
+    def get_feed_channel_id(self) -> int | None:
+        """Get the feed channel ID from bot_config, or None if not set."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT value FROM bot_config WHERE key = %s",
+                ("feed_channel_id",),
+            )
+            row = cur.fetchone()
+        if row and row.get("value"):
+            try:
+                return int(row["value"])
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def set_feed_channel_id(self, channel_id: int | None) -> None:
+        """Set or clear the feed channel ID in bot_config."""
+        with self._get_conn() as conn:
+            if channel_id is None:
+                conn.execute(
+                    "DELETE FROM bot_config WHERE key = %s",
+                    ("feed_channel_id",),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO bot_config (key, value)
+                    VALUES (%s, %s)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    ("feed_channel_id", str(channel_id)),
+                )
+            conn.commit()

@@ -11,6 +11,7 @@ from selenium.webdriver.common.by import By  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import product_embed
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
+from dealsnoop.listing_log import SearchLogCollector
 from dealsnoop.logger import logger
 from dealsnoop.maps import get_distance_and_duration
 from dealsnoop.product import Product
@@ -82,21 +83,30 @@ class FacebookEngine:
         return listings
     
 
+    def _title_from_link(self, link: Tag) -> str:
+        """Extract a minimal title from a link for logging."""
+        text = next(iter(link.stripped_strings), None)
+        if text:
+            return text[:80] + ("..." if len(text) > 80 else "")
+        href = link.get("href") or ""
+        return href[:80] + ("..." if len(href) > 80 else "") or "Unknown listing"
+
     async def perform_search(self, search: SearchConfig, sort: str) -> list[Product]:
         products = []
-        # &minPrice={search.min_price}&maxPrice={search.max_price}
+        collector = SearchLogCollector(search.id)
+        feed_channel_id = self.snoop.searches.get_feed_channel_id()
+
         links = await self.gather_listings(search, sort)
         for link in links:
-            if not self.validate_listing(link):
+            passed, skip_reason = self.validate_listing(link)
+            if not passed:
+                collector.add_skipped(self._title_from_link(link), skip_reason or "Unknown")
                 continue
-
-            
-
-
 
             text = '\n'.join(link.stripped_strings)
             lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
             if len(lines) < 2:
+                collector.add_skipped(self._title_from_link(link), "Malformed listing")
                 continue
 
             # Vehicle listings have extra line: [price, title, location, mileage]
@@ -113,46 +123,48 @@ class FacebookEngine:
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
-                logger.info(f"Skipping listing because it is outside of radius ({location} - {round(distance)} mi)")
+                collector.add_skipped(
+                    title,
+                    f"Outside radius ({location} - {round(distance)} mi)",
+                )
                 continue
 
-            # Regular expression to find numeric values
             numeric_pattern = re.compile(r'\d[\d,.]*')
-            
-            
-            # Extracting prices
-            # Iterate through lines to find the first line with numbers
             price = 0
             for line in lines:
                 match = numeric_pattern.search(line)
-                if match:    
-                    # Extract the first numeric value found
+                if match:
                     price_str = match.group()
-                    # Convert price to float (handle commas)
                     price = float(price_str.replace(',',''))
                     break
 
             url = f"https://facebook.com{link.get('href')}"
             img = link.find('img')['src']
             date, description = await self.get_product_info(url)
-            logger.info("Got date and description")
 
-            
-            passed, thought_trace = await self.validate_quality(title, search.terms, search.target_price, price, description, search.context)
+            passed, thought_trace = await self.validate_quality(
+                title, search.terms, search.target_price, price, description, search.context
+            )
             if not passed:
+                collector.add_skipped(
+                    title,
+                    f"Quality check failed: {thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}",
+                    url=re.sub(r'\?.*', '', url),
+                    price=price,
+                )
                 continue
-            logger.info("Quality validated")
 
-
-            product=Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
+            product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
+            collector.add_kept(title, "Matched", url=product.url, price=price)
 
             embed = product_embed(product, distance, duration)
-
             await self.snoop.bot.send_embed(embed, search.channel, thought_trace=thought_trace)
 
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))
+
+        await collector.flush(bot=self.snoop.bot, feed_channel_id=feed_channel_id)
         return products
     
     async def run_search_now(self) -> None:
@@ -173,24 +185,23 @@ class FacebookEngine:
         if len(self.cache.urls) >= 2000:
             self.cache.flush(1000)
 
-    def validate_listing(self, link: Tag) -> bool:
+    def validate_listing(self, link: Tag) -> tuple[bool, str | None]:
+        """Returns (passed, skip_reason). skip_reason is None when passed."""
         img_tag = link.find("img")
         if img_tag is None:
-            return False
+            return (False, "Invalid listing (no img)")
         attrs = getattr(img_tag, "attrs", {})
         if "alt" not in attrs:
-            return False
-
+            return (False, "Invalid listing (no alt)")
         href = link.get("href")
         if not isinstance(href, str):
-            return False
+            return (False, "Invalid listing (no href)")
         listing_id = re.sub(r"/marketplace/item/(\d+)", r"\1", href)
         listing_id = re.sub(r"/.*", "", listing_id)
         if self.cache.contains(listing_id):
-            logger.info("Hit listing in cache, skipping")
-            return False
+            return (False, "Cache hit")
         self.cache.add_url(listing_id)
-        return True
+        return (True, None)
 
     async def validate_quality(
         self,
@@ -226,6 +237,5 @@ class FacebookEngine:
         parts = response.output_text.split("|| ")
         thought_trace = parts[0].strip() if parts else ""
         passed = len(parts) > 1 and parts[-1].lower() == "true"
-        logger.info(thought_trace)
         return (passed, thought_trace)
 

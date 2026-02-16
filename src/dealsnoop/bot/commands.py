@@ -112,3 +112,26 @@ class Commands(commands.Cog):
         except Exception as e:
             logger.exception("Forcesearch failed")
             await interaction.followup.send(f"Search failed: {e}")
+
+    @discord.app_commands.group(name="searchfeed", description="Configure the listing feed channel.")
+    async def searchfeed(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            "Use `/searchfeed setchannel <#channel>` to set the feed, or `none` to clear."
+        )
+
+    @searchfeed.command(name="setchannel", description="Set or clear the channel where listing feed (kept/skipped) is posted.")
+    async def searchfeed_setchannel(
+        self,
+        interaction: discord.Interaction,
+        channel: str,
+    ) -> None:
+        try:
+            if channel.strip().lower() == "none":
+                self.snoop.searches.set_feed_channel_id(None)
+                await interaction.response.send_message("Feed channel cleared.")
+                return
+            channel_id = _parse_channel_id(channel)
+            self.snoop.searches.set_feed_channel_id(channel_id)
+            await interaction.response.send_message(f"Feed channel set to <#{channel_id}>.")
+        except ValueError as e:
+            await interaction.response.send_message(f"ERROR: {e}")
