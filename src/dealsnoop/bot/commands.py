@@ -24,9 +24,33 @@ def _parse_channel_id(value: str) -> int:
     raise ValueError("Channel ID must be a number or channel mention (e.g. <#123456789>)")
 
 
+MAX_EMBED_DESC = 4096
+
+
 class Commands(commands.Cog):
     def __init__(self, snoop: Snoop):
         self.snoop = snoop
+
+    @discord.app_commands.context_menu(name="Show AI reasoning")
+    async def show_ai_reasoning(self, interaction: discord.Interaction, message: discord.Message) -> None:
+        """Show the AI thought trace for a listing message (right-click context menu)."""
+        cache = self.snoop.bot._thought_trace_cache
+        thought_trace = cache.get(message.id)
+        if thought_trace is None:
+            await interaction.response.send_message(
+                "No AI reasoning available for this message.",
+                ephemeral=True,
+            )
+            return
+        text = thought_trace
+        if len(text) > MAX_EMBED_DESC:
+            text = text[: MAX_EMBED_DESC - 3] + "..."
+        embed = discord.Embed(
+            title="AI thought trace",
+            description=text,
+            color=0x5865F2,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(

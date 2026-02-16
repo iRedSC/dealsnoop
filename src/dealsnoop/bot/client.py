@@ -15,10 +15,12 @@ intents.message_content = True
 
 class Client(commands.Bot):
     _unregistered_cogs: list[commands.Cog]
+    _thought_trace_cache: dict[int, str]
 
     def __init__(self):
         super().__init__(command_prefix="!@#", intents=intents)
         self._unregistered_cogs = []
+        self._thought_trace_cache = {}
     
 
     def register_cog(self, cog: commands.Cog) -> None:
@@ -49,12 +51,9 @@ class Client(commands.Bot):
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
-        view = None
+        msg = await channel.send(embed=embed)
         if thought_trace:
-            from dealsnoop.bot.views import ThoughtTraceView
-
-            view = ThoughtTraceView(thought_trace)
-        await channel.send(embed=embed, view=view)
+            self._thought_trace_cache[msg.id] = thought_trace.strip() or "(No thought trace available)"
 
 
 
