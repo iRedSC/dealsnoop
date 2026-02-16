@@ -25,15 +25,9 @@ poetry install
 poetry run python -m dealsnoop
 ```
 
-## Docker (Same Container Network)
+## Docker / Dokploy
 
-When running in Docker with Postgres on the same network, use the service name as host:
-
-```
-DB_URL=postgresql://user:password@postgres:5432/dealsnoop
-```
-
-See `docker-compose.yml` for a full setup.
+Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from your Postgres application.
 
 ## Discord Slash Commands
 

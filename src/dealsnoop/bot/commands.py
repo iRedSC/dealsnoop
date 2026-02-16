@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+import re
+
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import search_config_embed
-from dealsnoop.config import DEFAULT_CHANNEL_ID
 from dealsnoop.logger import logger
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
+
+
+def _parse_channel_id(value: str) -> int:
+    """Parse channel ID from raw number or mention format (<#123> or <@123>)."""
+    value = value.strip()
+    if value.isdigit():
+        return int(value)
+    m = re.match(r"<[#@!]*(\d+)>", value)
+    if m:
+        return int(m.group(1))
+    raise ValueError("Channel ID must be a number or channel mention (e.g. <#123456789>)")
 
 
 class Commands(commands.Cog):
@@ -36,7 +48,15 @@ class Commands(commands.Cog):
                 if stored.id == search_id:
                     search_id = search_id + "_"
 
-            channel = int(channel_id) if channel_id else DEFAULT_CHANNEL_ID
+            if channel_id:
+                channel = _parse_channel_id(channel_id)
+            elif interaction.channel_id is not None:
+                channel = interaction.channel_id
+            else:
+                await interaction.response.send_message(
+                    "ERROR: Could not determine channel. Use this command in a channel or specify a channel ID."
+                )
+                return
             config = SearchConfig(
                 search_id,
                 formatted_terms,
@@ -50,8 +70,8 @@ class Commands(commands.Cog):
             self.snoop.searches.add_object(config)
             embed = search_config_embed(config)
             await interaction.response.send_message(embed=embed)
-        except ValueError:
-            await interaction.response.send_message("ERROR: Channel ID must be a number.")
+        except ValueError as e:
+            await interaction.response.send_message(f"ERROR: {e}")
 
     @discord.app_commands.command(name="list", description="List searches currently being watched.")
     async def list_searches(self, interaction: discord.Interaction) -> None:
