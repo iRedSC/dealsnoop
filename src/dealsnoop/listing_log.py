@@ -23,6 +23,7 @@ class ListingLog:
     reason: str
     url: str | None = None
     price: float | None = None
+    img: str | None = None
 
 
 class SearchLogCollector:
@@ -41,7 +42,13 @@ class SearchLogCollector:
         self._running = False
         self._flush_task: asyncio.Task[None] | None = None
 
-    def add_grouped(self, title: str, reason: str) -> None:
+    def add_grouped(
+        self,
+        title: str,
+        reason: str,
+        url: str | None = None,
+        img: str | None = None,
+    ) -> None:
         """Add a grouped entry (cache hit, outside radius, malformed). Buffered, sent every 1s."""
         self._grouped_entries.append(
             ListingLog(
@@ -49,8 +56,9 @@ class SearchLogCollector:
                 title=title,
                 outcome=Outcome.SKIPPED,
                 reason=reason,
-                url=None,
+                url=url,
                 price=None,
+                img=img,
             )
         )
 
@@ -60,6 +68,7 @@ class SearchLogCollector:
         reason: str = "Matched",
         url: str | None = None,
         price: float | None = None,
+        img: str | None = None,
     ) -> None:
         """Log and send immediately to Discord feed."""
         entry = ListingLog(
@@ -69,6 +78,7 @@ class SearchLogCollector:
             reason=reason,
             url=url,
             price=price,
+            img=img,
         )
         self._log_entry(entry)
         asyncio.create_task(self._send_individual(entry))
@@ -79,6 +89,7 @@ class SearchLogCollector:
         reason: str,
         url: str | None = None,
         price: float | None = None,
+        img: str | None = None,
     ) -> None:
         """Log and send immediately to Discord feed."""
         entry = ListingLog(
@@ -88,6 +99,7 @@ class SearchLogCollector:
             reason=reason,
             url=url,
             price=price,
+            img=img,
         )
         self._log_entry(entry)
         asyncio.create_task(self._send_individual(entry))
@@ -104,12 +116,12 @@ class SearchLogCollector:
             return
         from dealsnoop.bot.embeds import individual_listing_feed_embed
 
-        embed = individual_listing_feed_embed(entry)
+        embed, view = individual_listing_feed_embed(entry)
         channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
         if channel is None or not hasattr(channel, "send"):
             return
         try:
-            await channel.send(embed=embed)
+            await channel.send(embed=embed, view=view)
         except Exception:
             pass
 
@@ -138,13 +150,13 @@ class SearchLogCollector:
             self._log_entry(entry)
 
         if self._feed_channel_id and self._bot is not None:
-            from dealsnoop.bot.embeds import grouped_listing_feed_embed
+            from dealsnoop.bot.embeds import grouped_listing_feed_embeds
 
-            embed = grouped_listing_feed_embed(self.search_id, entries)
+            embeds, view = grouped_listing_feed_embeds(self.search_id, entries)
             channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
-            if channel is not None and hasattr(channel, "send"):
+            if channel is not None and hasattr(channel, "send") and embeds:
                 try:
-                    await channel.send(embed=embed)
+                    await channel.send(embeds=embeds, view=view)
                 except Exception:
                     pass
 

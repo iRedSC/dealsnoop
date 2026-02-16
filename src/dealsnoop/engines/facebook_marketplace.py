@@ -92,6 +92,16 @@ class FacebookEngine:
         href = link.get("href") or ""
         return href[:80] + ("..." if len(href) > 80 else "") or "Unknown listing"
 
+    def _url_and_img_from_link(self, link: Tag) -> tuple[str | None, str | None]:
+        """Extract listing URL and thumbnail img from a link."""
+        href = link.get("href")
+        url = f"https://facebook.com{href}" if isinstance(href, str) and href else None
+        img_tag = link.find("img")
+        img = None
+        if img_tag and getattr(img_tag, "attrs", {}).get("src"):
+            img = img_tag["src"]
+        return (url, img)
+
     async def perform_search(self, search: SearchConfig, sort: str) -> list[Product]:
         products = []
         feed_channel_id = self.snoop.searches.get_feed_channel_id()
@@ -116,7 +126,10 @@ class FacebookEngine:
             text = '\n'.join(link.stripped_strings)
             lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
             if len(lines) < 2:
-                collector.add_grouped(self._title_from_link(link), "Malformed listing")
+                url, img = self._url_and_img_from_link(link)
+                collector.add_grouped(
+                    self._title_from_link(link), "Malformed listing", url=url, img=img
+                )
                 continue
 
             # Vehicle listings have extra line: [price, title, location, mileage]
@@ -133,9 +146,12 @@ class FacebookEngine:
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
+                url, img = self._url_and_img_from_link(link)
                 collector.add_grouped(
                     title,
                     f"Outside radius ({location} - {round(distance)} mi)",
+                    url=url,
+                    img=img,
                 )
                 continue
 
@@ -161,12 +177,15 @@ class FacebookEngine:
                     f"Quality check failed: {thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}",
                     url=re.sub(r'\?.*', '', url),
                     price=price,
+                    img=img,
                 )
                 continue
 
             product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            collector.add_individual_kept(title, "Matched", url=product.url, price=price)
+            collector.add_individual_kept(
+                title, "Matched", url=product.url, price=price, img=img
+            )
 
             embed = product_embed(product, distance, duration)
             await self.snoop.bot.send_embed(embed, search.channel, thought_trace=thought_trace)

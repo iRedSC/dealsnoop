@@ -35,34 +35,60 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
-def grouped_listing_feed_embed(
+def grouped_listing_feed_embeds(
     search_id: str,
     entries: Sequence[ListingLog],
-) -> discord.Embed:
-    """Build a single embed for cache hits and outside radius (grouped)."""
+) -> tuple[list[discord.Embed], discord.ui.View | None]:
+    """Build embeds for grouped feed: cache hits as count, others with thumbnails and links."""
     if not entries:
-        return discord.Embed(title="Search: " + search_id, color=0xFFA500)
+        return [], None
+
+    cache_hits = [e for e in entries if e.reason == "Cache hit"]
+    others = [e for e in entries if e.reason != "Cache hit"]
+
+    embeds: list[discord.Embed] = []
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    FIELD_NAME_LIMIT = 256
-    FIELD_VALUE_LIMIT = 1024
-    embed = discord.Embed(
-        title=f"Search: {search_id} — Cache hits & outside radius",
-        description=f"[{timestamp}] {len(entries)} skipped",
-        color=0xFFA500,
-    )
-    for entry in entries:
-        name = f"SKIPPED | {entry.title}"
-        if len(name) > FIELD_NAME_LIMIT:
-            name = name[: FIELD_NAME_LIMIT - 3] + "..."
-        value = entry.reason
-        if len(value) > FIELD_VALUE_LIMIT:
-            value = value[: FIELD_VALUE_LIMIT - 3] + "..."
-        embed.add_field(name=name, value=value, inline=False)
-    return embed
+
+    if cache_hits:
+        embeds.append(
+            discord.Embed(
+                title=f"Search: {search_id} — Skipped",
+                description=f"[{timestamp}] Skipped {len(cache_hits)} cache hits",
+                color=0xFFA500,
+            )
+        )
+
+    for entry in others:
+        embed = discord.Embed(
+            title=entry.title[:256] if len(entry.title) <= 256 else entry.title[:253] + "...",
+            url=entry.url,
+            description=entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "...",
+            color=0xFFA500,
+        )
+        if entry.img:
+            embed.set_thumbnail(url=entry.img)
+        embeds.append(embed)
+
+    view = None
+    if others and any(e.url for e in others):
+        view = discord.ui.View()
+        for entry in others[:25]:
+            if entry.url:
+                view.add_item(
+                    discord.ui.Button(
+                        label="View listing",
+                        url=entry.url,
+                        style=discord.ButtonStyle.link,
+                    )
+                )
+
+    return embeds, view
 
 
-def individual_listing_feed_embed(entry: ListingLog) -> discord.Embed:
-    """Build one embed for a single KEPT or SKIPPED entry (AI decisions)."""
+def individual_listing_feed_embed(
+    entry: ListingLog,
+) -> tuple[discord.Embed, discord.ui.View | None]:
+    """Build one embed for a single KEPT or SKIPPED entry (AI decisions). Includes thumbnail and link when available."""
     FIELD_NAME_LIMIT = 256
     FIELD_VALUE_LIMIT = 1024
     color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
@@ -75,10 +101,19 @@ def individual_listing_feed_embed(entry: ListingLog) -> discord.Embed:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
     embed = discord.Embed(
         title=f"Search: {entry.search_id}",
+        url=entry.url,
         color=color,
     )
     embed.add_field(name=name, value=value, inline=False)
-    return embed
+    if entry.img:
+        embed.set_thumbnail(url=entry.img)
+    view = None
+    if entry.url:
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(label="View listing", url=entry.url, style=discord.ButtonStyle.link)
+        )
+    return embed, view
 
 
 def listing_feed_embeds(
