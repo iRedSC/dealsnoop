@@ -1,4 +1,4 @@
-
+"""Product listing data model."""
 
 from dataclasses import dataclass
 

@@ -1,28 +1,21 @@
-import asyncio
-import discord
-from discord.ext import tasks
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+"""Facebook Marketplace search engine using Selenium and BeautifulSoup."""
 
-from bs4 import BeautifulSoup
-import re
+import asyncio
 import random
+import re
+
+from bs4 import BeautifulSoup, Tag  # type: ignore[import-untyped]
+from discord.ext import tasks  # type: ignore[import-untyped]
+from selenium.common.exceptions import NoSuchElementException  # type: ignore[import-untyped]
+from selenium.webdriver.common.by import By  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import product_embed
-from dealsnoop.product import Product
-from typing import Optional, Protocol
-
-from dealsnoop.bot.client import Client
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
-from dealsnoop.maps import get_distance_and_duration
-from dealsnoop.search_config import SearchConfig
 from dealsnoop.logger import logger
+from dealsnoop.maps import get_distance_and_duration
+from dealsnoop.product import Product
+from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
-class Bot(Protocol):
-    async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
-        ...
-
 
 
 class FacebookEngine:
@@ -44,9 +37,8 @@ class FacebookEngine:
             await asyncio.to_thread(close_button.click)
             logger.info("Close button clicked")
         
-        except:
+        except Exception:
             logger.warning("Could not find or click the close button")
-            pass
 
         try:
             await asyncio.sleep(2)
@@ -171,20 +163,34 @@ class FacebookEngine:
         if len(self.cache.urls) >= 2000:
             self.cache.flush(1000)
 
-    def validate_listing(self, link):
-        img_tag = link.find('img')
-        if (img_tag == None) or (img_tag and 'alt' not in img_tag.attrs):
+    def validate_listing(self, link: Tag) -> bool:
+        img_tag = link.find("img")
+        if img_tag is None:
             return False
-        
-        id = re.sub(r"/marketplace/item/(\d+)", r"\1", link.get('href'))
-        id = re.sub(r'/.*', '', id)
-        if self.cache.contains(id):
+        attrs = getattr(img_tag, "attrs", {})
+        if "alt" not in attrs:
+            return False
+
+        href = link.get("href")
+        if not isinstance(href, str):
+            return False
+        listing_id = re.sub(r"/marketplace/item/(\d+)", r"\1", href)
+        listing_id = re.sub(r"/.*", "", listing_id)
+        if self.cache.contains(listing_id):
             logger.info("Hit listing in cache, skipping")
             return False
-        self.cache.add_url(id)
+        self.cache.add_url(listing_id)
         return True
 
-    async def validate_quality(self, title, product, target_price, price, description, context):
+    async def validate_quality(
+        self,
+        title: str,
+        terms: tuple[str, ...],
+        target_price: str | None,
+        price: float,
+        description: str,
+        context: str | None,
+    ) -> bool:
         logger.info("Validating listing quality")
         if not target_price:
             target_price = "(no max price)"
@@ -195,7 +201,7 @@ class FacebookEngine:
 
     Example: "<your thoughts> || True"
 
-    I am searching for '{product}', for a rough max price of {target_price} (can be slightly higher).
+    I am searching for '{terms}', for a rough max price of {target_price} (can be slightly higher).
     Additional Context: '{context}'.
 
     Here is the listing:
@@ -208,8 +214,7 @@ class FacebookEngine:
     """)
         logger.info(f"{response.output_text.split("|| ")[0]}")
         
-        if response.output_text.split("|| ")[-1].lower() != 'true':
-            return
-        
+        if response.output_text.split("|| ")[-1].lower() != "true":
+            return False
         return True
 

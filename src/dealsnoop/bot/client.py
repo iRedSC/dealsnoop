@@ -1,18 +1,14 @@
+"""Discord bot client with slash command support."""
+
 from __future__ import annotations
-import asyncio
-from discord.ext import commands
-import discord
+
+import discord  # type: ignore[import-untyped]
+from discord.ext import commands  # type: ignore[import-untyped]
+
+from dealsnoop.config import GUILD_ID
 from dealsnoop.logger import logger
-import os
 
-
-FILE_PATH = os.getenv('FILE_PATH')
-if not FILE_PATH:
-    FILE_PATH = ""
-
-GUILD_ID = discord.Object(1411757356894650381)
-
-
+GUILD = discord.Object(GUILD_ID)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -25,37 +21,30 @@ class Client(commands.Bot):
         self._unregistered_cogs = []
     
 
-    def register_cog(self, cog: commands.Cog):
+    def register_cog(self, cog: commands.Cog) -> None:
         self._unregistered_cogs.append(cog)
 
-
-    async def _register_cog(self, cog: commands.Cog):
+    async def _register_cog(self, cog: commands.Cog) -> None:
         logger.info("Registering Commands")
         await self.add_cog(cog)
         for command in cog.get_app_commands():
-            self.tree.add_command(command, guild=GUILD_ID)
+            self.tree.add_command(command, guild=GUILD)
             logger.info(f"Added command '{command.name}'")
-
-
 
     async def setup_hook(self) -> None:
         for cog in self._unregistered_cogs:
             await self._register_cog(cog)
-        await self.tree.sync(guild=GUILD_ID)
+        await self.tree.sync(guild=GUILD)
         logger.info("$G$Command tree synced")
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         ...
 
     async def send_embed(self, embed: discord.Embed, channel_id: int) -> None:
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
-        await channel.send(embed=embed) 
-
-
-
-
+        await channel.send(embed=embed)
 
 
 

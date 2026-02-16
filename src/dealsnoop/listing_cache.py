@@ -1,6 +1,10 @@
+"""URL cache for avoiding duplicate listing notifications."""
+
 import os
 from typing import Set
+
 from dealsnoop.logger import logger
+
 
 class Cache:
     def __init__(self, cache_file_path: str):
@@ -61,13 +65,8 @@ class Cache:
         self.urls.add(url.strip())
 
     def contains(self, url: str) -> bool:
-        """
-        Checks if a URL is already in the cache.
-        """
-        logger.info(f"Searching for url in cache: $M$ {url}")
-        in_cache = url.strip() in self.urls
-        logger.info(f"Url found in cache: $M$ {url}")
-        return in_cache
+        """Check if a URL is already in the cache."""
+        return url.strip() in self.urls
 
     def flush(self, x: int):
         """
@@ -104,9 +103,9 @@ class Cache:
             # Update the in-memory set
             self.urls = set(remaining)
 
-            print(
+            logger.info(
                 f"Flushed {min(x, len(lines))} lines from cache. "
                 f"{len(self.urls)} URLs remain."
             )
         except IOError as e:
-            print(f"Error flushing cache: {e}")
+            logger.error(f"Error flushing cache: {e}")

@@ -1,10 +1,13 @@
+"""Orchestrates search engines and coordinates with the Discord bot."""
 
 from __future__ import annotations
-from asyncio.log import logger
+
 from typing import Protocol
+
+from dealsnoop.logger import logger
 from dealsnoop.bot.client import Client
 from dealsnoop.pickler import ObjectStore
-from discord.ext.tasks import Loop
+from discord.ext.tasks import Loop  # type: ignore[import-untyped]
 
 
 class Engine(Protocol):

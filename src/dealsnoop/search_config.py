@@ -1,4 +1,4 @@
-
+"""Search configuration for marketplace watches."""
 
 from dataclasses import dataclass
 

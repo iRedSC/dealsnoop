@@ -1,3 +1,5 @@
+"""Colored logging with $X$ markup support."""
+
 import logging
 import re
 

@@ -1,6 +1,11 @@
-import pickle
+"""Persistent object storage using pickle."""
+
 import os
+import pickle
+from typing import Any
+
 from dealsnoop.logger import logger
+
 
 class ObjectStore:
     """
@@ -18,7 +23,7 @@ class ObjectStore:
         self.objects = set()
         self._load_objects() # Load existing objects on initialization
 
-    def add_object(self, obj):
+    def add_object(self, obj: Any) -> None:
         """
         Adds an object to the store.
 
@@ -28,7 +33,7 @@ class ObjectStore:
         self.objects.add(obj)
         self._save_objects()
 
-    def remove_object(self, obj):
+    def remove_object(self, obj: Any) -> None:
         """
         Removes an object from the store.
 
@@ -41,7 +46,7 @@ class ObjectStore:
         else:
             logger.warning(f"Warning: Object {obj} not found in the store.")
 
-    def get_all_objects(self):
+    def get_all_objects(self) -> set[Any]:
         """
         Retrieves all objects currently in the store.
 
@@ -50,7 +55,7 @@ class ObjectStore:
         """
         return self.objects.copy() # Return a copy to prevent external modification
 
-    def clear_store(self):
+    def clear_store(self) -> None:
         """
         Clears all objects from the store and deletes the pickle file.
         """
@@ -61,7 +66,7 @@ class ObjectStore:
         else:
             logger.info("Store cleared, but no pickle file existed to delete.")
 
-    def _save_objects(self):
+    def _save_objects(self) -> None:
         """
         Saves the current set of objects to the specified file using pickling.
         """
@@ -72,7 +77,7 @@ class ObjectStore:
         except Exception as e:
             logger.error(f"Error saving objects: $R${e}")
 
-    def _load_objects(self):
+    def _load_objects(self) -> None:
         """
         Loads objects from the specified file using unpickling.
         If the file does not exist, an empty set is initialized.
