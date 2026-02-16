@@ -111,17 +111,17 @@ class SearchLogCollector:
         )
 
     async def _send_individual(self, entry: ListingLog) -> None:
-        """Send a single individual embed to the feed channel."""
+        """Send a single individual feed message to the feed channel (Components V2)."""
         if not self._feed_channel_id or self._bot is None:
             return
-        from dealsnoop.bot.embeds import individual_listing_feed_embed
+        from dealsnoop.bot.embeds import individual_listing_feed_layout
 
-        embed, view = individual_listing_feed_embed(entry)
+        view = individual_listing_feed_layout(entry)
         channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
         if channel is None or not hasattr(channel, "send"):
             return
         try:
-            await channel.send(embed=embed, view=view)
+            await channel.send(view=view)
         except Exception:
             pass
 
@@ -150,13 +150,13 @@ class SearchLogCollector:
             self._log_entry(entry)
 
         if self._feed_channel_id and self._bot is not None:
-            from dealsnoop.bot.embeds import grouped_listing_feed_embeds
+            from dealsnoop.bot.embeds import grouped_listing_feed_layout
 
-            embeds, view = grouped_listing_feed_embeds(self.search_id, entries)
+            view = grouped_listing_feed_layout(self.search_id, entries)
             channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
-            if channel is not None and hasattr(channel, "send") and embeds:
+            if channel is not None and hasattr(channel, "send") and view is not None:
                 try:
-                    await channel.send(embeds=embeds, view=view)
+                    await channel.send(view=view)
                 except Exception:
                     pass
 

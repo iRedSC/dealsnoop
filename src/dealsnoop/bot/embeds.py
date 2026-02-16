@@ -35,63 +35,60 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
-def grouped_listing_feed_embeds(
+def _listing_accessory(entry: ListingLog) -> discord.ui.Button | discord.ui.Thumbnail:
+    """Button (View listing) when url exists, else Thumbnail as placeholder."""
+    if entry.url:
+        return discord.ui.Button(
+            label="View listing",
+            url=entry.url,
+            style=discord.ButtonStyle.link,
+        )
+    img = entry.img or "https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353"
+    return discord.ui.Thumbnail(img)
+
+
+def grouped_listing_feed_layout(
     search_id: str,
     entries: Sequence[ListingLog],
-) -> tuple[list[discord.Embed], discord.ui.View | None]:
-    """Build embeds for grouped feed: cache hits as count, others with thumbnails and links."""
+) -> discord.ui.LayoutView | None:
+    """Build Components V2 LayoutView for grouped feed: cache hits summary, then sections with View listing button inside each."""
     if not entries:
-        return [], None
+        return None
 
     cache_hits = [e for e in entries if e.reason == "Cache hit"]
     others = [e for e in entries if e.reason != "Cache hit"]
 
-    embeds: list[discord.Embed] = []
+    view = discord.ui.LayoutView()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if cache_hits:
-        embeds.append(
-            discord.Embed(
-                title=f"Search: {search_id} — Skipped",
-                description=f"[{timestamp}] Skipped {len(cache_hits)} cache hits",
-                color=0xFFA500,
+        view.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(
+                    f"**Search: {search_id} — Skipped**\n[{timestamp}] Skipped {len(cache_hits)} cache hits"
+                ),
+                accent_color=0xFFA500,
             )
         )
 
     for entry in others:
-        embed = discord.Embed(
-            title=entry.title[:256] if len(entry.title) <= 256 else entry.title[:253] + "...",
-            url=entry.url,
-            description=entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "...",
-            color=0xFFA500,
+        title = entry.title[:256] if len(entry.title) <= 256 else entry.title[:253] + "..."
+        reason = entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "..."
+        content = f"**{title}**\n{reason}"
+        view.add_item(
+            discord.ui.Section(
+                discord.ui.TextDisplay(content),
+                accessory=_listing_accessory(entry),
+            )
         )
-        if entry.img:
-            embed.set_thumbnail(url=entry.img)
-        embeds.append(embed)
 
-    view = None
-    if others and any(e.url for e in others):
-        view = discord.ui.View()
-        for entry in others[:25]:
-            if entry.url:
-                view.add_item(
-                    discord.ui.Button(
-                        label="View listing",
-                        url=entry.url,
-                        style=discord.ButtonStyle.link,
-                    )
-                )
-
-    return embeds, view
+    return view
 
 
-def individual_listing_feed_embed(
-    entry: ListingLog,
-) -> tuple[discord.Embed, discord.ui.View | None]:
-    """Build one embed for a single KEPT or SKIPPED entry (AI decisions). Includes thumbnail and link when available."""
+def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
+    """Build Components V2 LayoutView for a single KEPT or SKIPPED entry with View listing button inside the section."""
     FIELD_NAME_LIMIT = 256
     FIELD_VALUE_LIMIT = 1024
-    color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
     price_str = f" ${entry.price}" if entry.price is not None else ""
     name = f"{entry.outcome.value} | {entry.title}{price_str}"
     if len(name) > FIELD_NAME_LIMIT:
@@ -99,21 +96,16 @@ def individual_listing_feed_embed(
     value = entry.reason
     if len(value) > FIELD_VALUE_LIMIT:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
-    embed = discord.Embed(
-        title=f"Search: {entry.search_id}",
-        url=entry.url,
-        color=color,
-    )
-    embed.add_field(name=name, value=value, inline=False)
-    if entry.img:
-        embed.set_thumbnail(url=entry.img)
-    view = None
-    if entry.url:
-        view = discord.ui.View()
-        view.add_item(
-            discord.ui.Button(label="View listing", url=entry.url, style=discord.ButtonStyle.link)
+    content = f"**Search: {entry.search_id}**\n**{name}**\n{value}"
+
+    view = discord.ui.LayoutView()
+    view.add_item(
+        discord.ui.Section(
+            discord.ui.TextDisplay(content),
+            accessory=_listing_accessory(entry),
         )
-    return embed, view
+    )
+    return view
 
 
 def listing_feed_embeds(
