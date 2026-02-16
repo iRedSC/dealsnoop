@@ -3,3 +3,5 @@
 __pycache__
 cache.txt
 searches.pkl
+debug_cars
+debug_bikes

@@ -95,10 +95,21 @@ class FacebookEngine:
 
 
             text = '\n'.join(link.stripped_strings)
-            lines = text.split('\n')
+            lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
+            if len(lines) < 2:
+                continue
 
-            # Extract location
-            location = lines[-1]
+            # Vehicle listings have extra line: [price, title, location, mileage]
+            # Regular listings: [price, title, location]
+            mileage_pattern = re.compile(
+                r'\d[\d,.]*[Kk]?\s*(?:miles?|mi)\b', re.IGNORECASE
+            )
+            if len(lines) >= 4 and mileage_pattern.search(lines[-1]):
+                title = lines[-3]
+                location = lines[-2]
+            else:
+                title = lines[-2] if len(lines) >= 2 else (lines[-1] if lines else "")
+                location = lines[-1] if lines else ""
 
             distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
             if distance > search.radius:
@@ -120,12 +131,6 @@ class FacebookEngine:
                     # Convert price to float (handle commas)
                     price = float(price_str.replace(',',''))
                     break
-
-            # Extract title
-            title = lines[-2]
-
-
-
 
             url = f"https://facebook.com{link.get('href')}"
             img = link.find('img')['src']
