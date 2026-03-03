@@ -108,6 +108,9 @@ class Commands(commands.Cog):
         location_name = await self.snoop.get_location_for_city_code(city_code)
         category = await self._get_or_create_location_category(guild, location_name)
         channel_name = _slugify_discord_name(search_id, "watch")
+        existing = discord.utils.get(category.text_channels, name=channel_name)
+        if existing is not None:
+            return (existing.id, location_name)
         channel = await guild.create_text_channel(channel_name, category=category)
         return (channel.id, location_name)
 
