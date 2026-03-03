@@ -231,7 +231,9 @@ class FacebookEngine:
             )
 
             embed = product_embed(product, distance, duration)
-            await self.snoop.bot.send_embed(embed, search.channel, thought_trace=thought_trace)
+            await self.snoop.bot.send_embed(
+                embed, search.channel, thought_trace=thought_trace, search_id=search.id
+            )
 
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))

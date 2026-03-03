@@ -7,24 +7,37 @@ from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.config import GUILD_ID
 from dealsnoop.logger import logger
+from dealsnoop.store import SearchStore
 
 GUILD = discord.Object(GUILD_ID)
 
 intents = discord.Intents.default()
 intents.message_content = True
 
+
 class Client(commands.Bot):
     _unregistered_cogs: list[commands.Cog]
-    _thought_trace_cache: dict[int, str]
 
-    def __init__(self):
+    def __init__(self, searches: SearchStore):
         super().__init__(command_prefix="!@#", intents=intents)
         self._unregistered_cogs = []
-        self._thought_trace_cache = {}
+        self._searches = searches
     
 
     def register_cog(self, cog: commands.Cog) -> None:
         self._unregistered_cogs.append(cog)
+
+    def record_listing_metadata(
+        self,
+        message_id: int,
+        channel_id: int,
+        search_id: str,
+        thought_trace: str | None = None,
+    ) -> None:
+        """Store listing metadata for a Discord message."""
+        self._searches.record_listing_metadata(
+            message_id, channel_id, search_id, thought_trace
+        )
 
     async def _register_cog(self, cog: commands.Cog) -> None:
         logger.info("Registering Commands")
@@ -35,18 +48,26 @@ class Client(commands.Bot):
 
     async def setup_hook(self) -> None:
         @self.tree.context_menu(name="Show AI reasoning")
-        async def show_ai_reasoning(interaction: discord.Interaction, message: discord.Message) -> None:
-            cache = self._thought_trace_cache
-            thought_trace = cache.get(message.id)
-            if thought_trace is None:
+        async def show_ai_reasoning(
+            interaction: discord.Interaction, message: discord.Message
+        ) -> None:
+            meta = self._searches.get_listing_metadata(message.id)
+            if meta is None:
                 await interaction.response.send_message(
-                    "No AI reasoning available for this message.",
+                    "No metadata for this message.",
+                    ephemeral=True,
+                )
+                return
+            thought_trace = meta.get("thought_trace")
+            if not thought_trace:
+                await interaction.response.send_message(
+                    "No AI reasoning for this message (e.g. feed-only listing).",
                     ephemeral=True,
                 )
                 return
             max_desc = 4096
-            text = thought_trace
-            if len(text) > max_desc:
+            text = thought_trace[:max_desc]
+            if len(thought_trace) > max_desc:
                 text = text[: max_desc - 3] + "..."
             embed = discord.Embed(
                 title="AI thought trace",
@@ -55,8 +76,76 @@ class Client(commands.Bot):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
+        @self.tree.context_menu(name="Get watch command")
+        async def get_watch_command(
+            interaction: discord.Interaction, message: discord.Message
+        ) -> None:
+            meta = self._searches.get_listing_metadata(message.id)
+            if meta is None:
+                await interaction.response.send_message(
+                    "No watch found for this message.",
+                    ephemeral=True,
+                )
+                return
+            search_id = meta["search_id"]
+            config = self._searches.get_config_by_id(search_id)
+            if config is None:
+                await interaction.response.send_message(
+                    "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            terms_escaped = [t.replace('"', '\\"') for t in config.terms]
+            terms_str = ", ".join(terms_escaped)
+            ctx_escaped = (config.context or "").replace('"', '\\"')
+            parts = [
+                f'terms:"{terms_str}"',
+                f'channel_id:{message.channel_id}',
+            ]
+            if config.target_price:
+                parts.append(f'target_price:{config.target_price}')
+            if config.context:
+                parts.append(f'context:"{ctx_escaped}"')
+            parts.extend([
+                f"city_code:{config.city_code}",
+                f"days_listed:{config.days_listed}",
+                f"radius:{config.radius}",
+            ])
+            cmd = "/watch " + " ".join(parts)
+            await interaction.response.send_message(
+                f"```\n{cmd}\n```",
+                ephemeral=True,
+            )
+
+        @self.tree.context_menu(name="Remove watch")
+        async def remove_watch(
+            interaction: discord.Interaction, message: discord.Message
+        ) -> None:
+            meta = self._searches.get_listing_metadata(message.id)
+            if meta is None:
+                await interaction.response.send_message(
+                    "No watch found for this message.",
+                    ephemeral=True,
+                )
+                return
+            search_id = meta["search_id"]
+            config = self._searches.get_config_by_id(search_id)
+            if config is None:
+                await interaction.response.send_message(
+                    "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            self._searches.remove_object(config)
+            await interaction.response.send_message(
+                f"Removed watch {search_id}.",
+                ephemeral=True,
+            )
+
         self.tree.add_command(show_ai_reasoning, guild=GUILD)
-        logger.info("Added command 'Show AI reasoning'")
+        self.tree.add_command(get_watch_command, guild=GUILD)
+        self.tree.add_command(remove_watch, guild=GUILD)
+        logger.info("Added commands 'Show AI reasoning', 'Get watch command', 'Remove watch'")
         for cog in self._unregistered_cogs:
             await self._register_cog(cog)
         await self.tree.sync(guild=GUILD)
@@ -70,13 +159,15 @@ class Client(commands.Bot):
         embed: discord.Embed,
         channel_id: int,
         thought_trace: str | None = None,
+        search_id: str | None = None,
     ) -> None:
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
         msg = await channel.send(embed=embed)
-        if thought_trace:
-            self._thought_trace_cache[msg.id] = thought_trace.strip() or "(No thought trace available)"
+        if search_id:
+            trace = (thought_trace or "").strip() or None
+            self.record_listing_metadata(msg.id, channel_id, search_id, trace)
 
 
 

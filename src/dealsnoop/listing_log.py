@@ -121,7 +121,10 @@ class SearchLogCollector:
         if channel is None or not hasattr(channel, "send"):
             return
         try:
-            await channel.send(view=view)
+            msg = await channel.send(view=view)
+            record = getattr(self._bot, "record_listing_metadata", None)
+            if record is not None:
+                record(msg.id, channel.id, entry.search_id, None)
         except Exception:
             pass
 
@@ -156,7 +159,10 @@ class SearchLogCollector:
             channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
             if channel is not None and hasattr(channel, "send") and view is not None:
                 try:
-                    await channel.send(view=view)
+                    msg = await channel.send(view=view)
+                    record = getattr(self._bot, "record_listing_metadata", None)
+                    if record is not None:
+                        record(msg.id, channel.id, self.search_id, None)
                 except Exception:
                     pass
 

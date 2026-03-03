@@ -18,7 +18,7 @@ if not DB_URL:
 
 searches = SearchStore()
 
-bot = Client()
+bot = Client(searches)
 snoop = Snoop(bot, searches)
 
 

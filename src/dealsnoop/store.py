@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS location_cache (
 );
 """
 
+LISTING_METADATA_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS listing_metadata (
+    message_id BIGINT PRIMARY KEY,
+    channel_id BIGINT NOT NULL,
+    search_id VARCHAR(255) NOT NULL,
+    thought_trace TEXT
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -90,6 +99,7 @@ class SearchStore:
             conn.execute(BOT_CONFIG_TABLE_SQL)
             conn.execute(USER_LOCATIONS_TABLE_SQL)
             conn.execute(LOCATION_CACHE_TABLE_SQL)
+            conn.execute(LISTING_METADATA_TABLE_SQL)
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
             conn.commit()
@@ -144,6 +154,49 @@ class SearchStore:
             cur = conn.execute("SELECT * FROM searches")
             rows = cur.fetchall()
         return {_row_to_config(row) for row in rows}
+
+    def get_config_by_id(self, search_id: str) -> SearchConfig | None:
+        """Return SearchConfig for given id, or None."""
+        with self._get_conn() as conn:
+            cur = conn.execute("SELECT * FROM searches WHERE id = %s", (search_id,))
+            row = cur.fetchone()
+        return _row_to_config(row) if row else None
+
+    def record_listing_metadata(
+        self,
+        message_id: int,
+        channel_id: int,
+        search_id: str,
+        thought_trace: str | None = None,
+    ) -> None:
+        """Store or update listing metadata for a Discord message."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO listing_metadata (message_id, channel_id, search_id, thought_trace)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (message_id) DO UPDATE SET
+                    channel_id = EXCLUDED.channel_id,
+                    search_id = EXCLUDED.search_id,
+                    thought_trace = EXCLUDED.thought_trace
+                """,
+                (message_id, channel_id, search_id, thought_trace),
+            )
+            conn.commit()
+
+    def get_listing_metadata(
+        self, message_id: int
+    ) -> dict[str, str | None] | None:
+        """Return listing metadata for a message, or None if not found."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT search_id, thought_trace FROM listing_metadata WHERE message_id = %s",
+                (message_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {"search_id": row["search_id"], "thought_trace": row.get("thought_trace")}
 
     def clear_store(self) -> None:
         """Clear all SearchConfig objects from the store."""
