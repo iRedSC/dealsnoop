@@ -72,16 +72,16 @@ def _product_content(
     distance: float | None,
     duration: str | None,
     description: str | None,
-) -> str:
-    """Build markdown content for product display (embed or Components V2)."""
+) -> tuple[str, str]:
+    """Build markdown content for product display. Returns (main_content, footer_content)."""
     desc = description if description is not None else product.description
-    content = f"[{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}\n\n{product.date}"
+    main = f"[{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}"
+    footer = f"{product.date}"
     if product.location:
-        content += f"\n\n{product.location}"
+        footer += f"\n\n{product.location}"
     if distance is not None and duration:
-        content += f" — {round(distance)} mi ({duration})"
-    content += f"\n\n[View listing]({product.url})"
-    return content
+        footer += f" — {round(distance)} mi ({duration})"
+    return (main, footer)
 
 
 def product_layout_view(
@@ -92,27 +92,26 @@ def product_layout_view(
     listing_id: str,
     expanded: bool,
 ) -> discord.ui.LayoutView:
-    """Build Components V2 LayoutView for a product with button inside as Section accessory."""
-    content = _truncate_content(_product_content(product, distance, duration, description))
+    """Build Components V2 LayoutView for a product. Thumbnail image, Show more button below description, then date/location."""
+    main, footer = _product_content(product, distance, duration, description)
+    main_content = _truncate_content(main)
+    footer_content = _truncate_content(footer)
+
     expanded_int = 1 if expanded else 0
     custom_id = f"{LISTING_DESC_PREFIX}{listing_id}:{expanded_int}"
     label = "Show less" if expanded else "Show more"
     button = discord.ui.Button(label=label, custom_id=custom_id)
 
+    thumbnail = discord.ui.Thumbnail(product.img or _PLACEHOLDER_IMG)
+    section = discord.ui.Section(
+        discord.ui.TextDisplay(main_content),
+        accessory=thumbnail,
+    )
+
+    container = discord.ui.Container(section, accent_color=ACCENT_PRODUCT)
+    container.add_row(button)
+    container.add_item(discord.ui.TextDisplay(footer_content))
     view = discord.ui.LayoutView()
-    children: list = [
-        discord.ui.Section(
-            discord.ui.TextDisplay(content),
-            accessory=button,
-        ),
-    ]
-    if product.img:
-        children.append(
-            discord.ui.MediaGallery(
-                discord.MediaGalleryItem(product.img, description=product.title[:FIELD_NAME_LIMIT]),
-            )
-        )
-    container = discord.ui.Container(*children, accent_color=ACCENT_PRODUCT)
     view.add_item(container)
     return view
 
