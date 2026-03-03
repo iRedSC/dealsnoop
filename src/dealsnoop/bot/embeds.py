@@ -12,6 +12,17 @@ from dealsnoop.search_config import SearchConfig
 DESCRIPTION_TRUNCATE_LINES = 3
 DESCRIPTION_TRUNCATE_CHARS = 300
 
+# Components V2 accent colors (Container border)
+ACCENT_PRODUCT = 0x03B2F8
+ACCENT_KEPT = 0x00FF00
+ACCENT_SKIPPED = 0xFFA500
+
+# Discord limits
+TEXT_DISPLAY_LIMIT = 4000
+FIELD_NAME_LIMIT = 256
+FIELD_VALUE_LIMIT = 1024
+FIELD_REASON_LIMIT = 4096
+
 
 def truncate_description(
     description: str, max_lines: int = DESCRIPTION_TRUNCATE_LINES
@@ -36,7 +47,7 @@ def product_embed(
         title=product.title,
         url=product.url,
         description=f"**${product.price}**\n\n{desc}",
-        color=0x03B2F8,
+        color=ACCENT_PRODUCT,
     )
     embed.set_author(name=f"{product.date}", url=product.url, icon_url="https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353")
 
@@ -49,20 +60,65 @@ def product_embed(
 LISTING_DESC_PREFIX = "listing_desc:"
 
 
-def listing_desc_button_view(listing_id: str, expanded: bool) -> discord.ui.LayoutView:
-    """Build LayoutView with Show more/Show less button for description toggle."""
+def _truncate_content(content: str, limit: int = TEXT_DISPLAY_LIMIT) -> str:
+    """Truncate content to Discord TextDisplay limit."""
+    if len(content) <= limit:
+        return content
+    return content[: limit - 3] + "..."
+
+
+def _product_content(
+    product: Product,
+    distance: float | None,
+    duration: str | None,
+    description: str | None,
+) -> str:
+    """Build markdown content for product display (embed or Components V2)."""
+    desc = description if description is not None else product.description
+    content = f"[{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}\n\n{product.date}"
+    if product.location:
+        content += f"\n\n{product.location}"
+    if distance is not None and duration:
+        content += f" — {round(distance)} mi ({duration})"
+    content += f"\n\n[View listing]({product.url})"
+    return content
+
+
+def product_layout_view(
+    product: Product,
+    distance: float | None,
+    duration: str | None,
+    description: str | None,
+    listing_id: str,
+    expanded: bool,
+) -> discord.ui.LayoutView:
+    """Build Components V2 LayoutView for a product with button inside as Section accessory."""
+    content = _truncate_content(_product_content(product, distance, duration, description))
     expanded_int = 1 if expanded else 0
     custom_id = f"{LISTING_DESC_PREFIX}{listing_id}:{expanded_int}"
     label = "Show less" if expanded else "Show more"
     button = discord.ui.Button(label=label, custom_id=custom_id)
-    action_row = discord.ui.ActionRow(button)
+
     view = discord.ui.LayoutView()
-    view.add_item(action_row)
+    children: list = [
+        discord.ui.Section(
+            discord.ui.TextDisplay(content),
+            accessory=button,
+        ),
+    ]
+    if product.img:
+        children.append(
+            discord.ui.MediaGallery(
+                discord.MediaGalleryItem(product.img, description=product.title[:FIELD_NAME_LIMIT]),
+            )
+        )
+    container = discord.ui.Container(*children, accent_color=ACCENT_PRODUCT)
+    view.add_item(container)
     return view
 
 
 def search_config_embed(config: SearchConfig) -> discord.Embed:
-    embed = discord.Embed(title=f"Successfully added search: {config.id}", color=0x03B2F8)
+    embed = discord.Embed(title=f"Successfully added search: {config.id}", color=ACCENT_PRODUCT)
     embed.add_field(name="Terms", value="\n".join([f"`{term}`" for term in config.terms]))
     embed.add_field(name="Channel", value=f"<#{config.channel}>")
     embed.add_field(name="Marketplace Location ID", value=config.city_code)
@@ -76,7 +132,7 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
 
 def list_searches_embed(searches: list[SearchConfig]) -> discord.Embed:
     """Build embed for `/list` command showing watched searches."""
-    embed = discord.Embed(title="Watched Searches", color=0x03B2F8)
+    embed = discord.Embed(title="Watched Searches", color=ACCENT_PRODUCT)
     if not searches:
         embed.description = "No watched searches."
         return embed
@@ -111,11 +167,26 @@ def _listing_content(content: str, entry: ListingLog) -> str:
     return content
 
 
+def _listing_container(
+    content: str,
+    accessory: discord.ui.Thumbnail,
+    accent_color: int,
+) -> discord.ui.Container:
+    """Build a standard Container with Section (text + thumbnail) for listing feed entries."""
+    return discord.ui.Container(
+        discord.ui.Section(
+            discord.ui.TextDisplay(_truncate_content(content)),
+            accessory=accessory,
+        ),
+        accent_color=accent_color,
+    )
+
+
 def grouped_listing_feed_layout(
     search_id: str,
     entries: Sequence[ListingLog],
 ) -> discord.ui.LayoutView | None:
-    """Build Components V2 LayoutView for grouped feed: cache hits summary, then sections with View listing button inside each."""
+    """Build Components V2 LayoutView for grouped feed: cache hits summary, then entries with thumbnail."""
     if not entries:
         return None
 
@@ -126,36 +197,27 @@ def grouped_listing_feed_layout(
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if cache_hits:
+        content = f"**Search: {search_id} — Skipped**\n[{timestamp}] Skipped {len(cache_hits)} cache hits"
         view.add_item(
             discord.ui.Container(
-                discord.ui.TextDisplay(
-                    f"**Search: {search_id} — Skipped**\n[{timestamp}] Skipped {len(cache_hits)} cache hits"
-                ),
-                accent_color=0xFFA500,
+                discord.ui.TextDisplay(_truncate_content(content)),
+                accent_color=ACCENT_SKIPPED,
             )
         )
 
     for entry in others:
-        title = entry.title[:256] if len(entry.title) <= 256 else entry.title[:253] + "..."
-        reason = entry.reason[:4096] if len(entry.reason) <= 4096 else entry.reason[:4093] + "..."
+        title = entry.title[:FIELD_NAME_LIMIT] if len(entry.title) <= FIELD_NAME_LIMIT else entry.title[: FIELD_NAME_LIMIT - 3] + "..."
+        reason = entry.reason[:FIELD_REASON_LIMIT] if len(entry.reason) <= FIELD_REASON_LIMIT else entry.reason[: FIELD_REASON_LIMIT - 3] + "..."
         content = _listing_content(f"**{title}**\n{reason}", entry)
         view.add_item(
-            discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(content),
-                    accessory=_listing_accessory(entry),
-                ),
-                accent_color=0xFFA500,
-            )
+            _listing_container(content, _listing_accessory(entry), ACCENT_SKIPPED)
         )
 
     return view
 
 
 def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
-    """Build Components V2 LayoutView for a single KEPT or SKIPPED entry with View listing button inside the section."""
-    FIELD_NAME_LIMIT = 256
-    FIELD_VALUE_LIMIT = 1024
+    """Build Components V2 LayoutView for a single KEPT or SKIPPED entry with thumbnail."""
     price_str = f" ${entry.price}" if entry.price is not None else ""
     name = f"{entry.outcome.value} | {entry.title}{price_str}"
     if len(name) > FIELD_NAME_LIMIT:
@@ -164,63 +226,10 @@ def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
     if len(value) > FIELD_VALUE_LIMIT:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
     content = _listing_content(f"**Search: {entry.search_id}**\n**{name}**\n{value}", entry)
-    accent_color = 0x00FF00 if entry.outcome.value == "KEPT" else 0xFFA500
+    accent_color = ACCENT_KEPT if entry.outcome.value == "KEPT" else ACCENT_SKIPPED
 
     view = discord.ui.LayoutView()
-    view.add_item(
-        discord.ui.Container(
-            discord.ui.Section(
-                discord.ui.TextDisplay(content),
-                accessory=_listing_accessory(entry),
-            ),
-            accent_color=accent_color,
-        )
-    )
+    view.add_item(_listing_container(content, _listing_accessory(entry), accent_color))
     return view
 
 
-def listing_feed_embeds(
-    search_id: str,
-    entries: Sequence[ListingLog],
-) -> list[discord.Embed]:
-    """Build embeds for the listing feed. Splits into multiple embeds if > 25 entries."""
-    if not entries:
-        return []
-
-    embeds: list[discord.Embed] = []
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    FIELDS_PER_EMBED = 25
-    FIELD_NAME_LIMIT = 256
-    FIELD_VALUE_LIMIT = 1024
-
-    for i in range(0, len(entries), FIELDS_PER_EMBED):
-        batch = entries[i : i + FIELDS_PER_EMBED]
-        kept_count = sum(1 for e in batch if e.outcome.value == "KEPT")
-        skipped_count = len(batch) - kept_count
-        color = 0x00FF00 if kept_count > 0 else 0xFFA500  # Green if any kept, else amber
-
-        title = f"Search: {search_id}"
-        if i > 0:
-            title += f" (part {i // FIELDS_PER_EMBED + 1})"
-        embed = discord.Embed(
-            title=title,
-            description=f"[{timestamp}] {kept_count} kept, {skipped_count} skipped",
-            color=color,
-        )
-
-        for entry in batch:
-            price_str = f" ${entry.price}" if entry.price is not None else ""
-            name = f"{entry.outcome.value} | {entry.title}{price_str}"
-
-            if len(name) > FIELD_NAME_LIMIT:
-                name = name[: FIELD_NAME_LIMIT - 3] + "..."
-
-            value = entry.reason
-            if len(value) > FIELD_VALUE_LIMIT:
-                value = value[: FIELD_VALUE_LIMIT - 3] + "..."
-
-            embed.add_field(name=name, value=value, inline=False)
-
-        embeds.append(embed)
-
-    return embeds

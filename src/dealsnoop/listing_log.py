@@ -117,16 +117,22 @@ class SearchLogCollector:
         from dealsnoop.bot.embeds import individual_listing_feed_layout
 
         view = individual_listing_feed_layout(entry)
-        channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
-        if channel is None or not hasattr(channel, "send"):
+        send_layout = getattr(self._bot, "send_layout", None)
+        if send_layout is not None:
+            try:
+                await send_layout(view, self._feed_channel_id, search_id=entry.search_id)
+            except Exception:
+                pass
             return
-        try:
-            msg = await channel.send(view=view)
-            record = getattr(self._bot, "record_listing_metadata", None)
-            if record is not None:
-                record(msg.id, channel.id, entry.search_id, None)
-        except Exception:
-            pass
+        channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
+        if channel is not None and hasattr(channel, "send"):
+            try:
+                msg = await channel.send(view=view)
+                record = getattr(self._bot, "record_listing_metadata", None)
+                if record is not None:
+                    record(msg.id, channel.id, entry.search_id, None)
+            except Exception:
+                pass
 
     def start(self) -> None:
         """Start the periodic flush task for grouped entries."""
@@ -156,15 +162,23 @@ class SearchLogCollector:
             from dealsnoop.bot.embeds import grouped_listing_feed_layout
 
             view = grouped_listing_feed_layout(self.search_id, entries)
-            channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
-            if channel is not None and hasattr(channel, "send") and view is not None:
-                try:
-                    msg = await channel.send(view=view)
-                    record = getattr(self._bot, "record_listing_metadata", None)
-                    if record is not None:
-                        record(msg.id, channel.id, self.search_id, None)
-                except Exception:
-                    pass
+            if view is not None:
+                send_layout = getattr(self._bot, "send_layout", None)
+                if send_layout is not None:
+                    try:
+                        await send_layout(view, self._feed_channel_id, search_id=self.search_id)
+                    except Exception:
+                        pass
+                else:
+                    channel = getattr(self._bot, "get_channel", lambda _: None)(self._feed_channel_id)
+                    if channel is not None and hasattr(channel, "send"):
+                        try:
+                            msg = await channel.send(view=view)
+                            record = getattr(self._bot, "record_listing_metadata", None)
+                            if record is not None:
+                                record(msg.id, channel.id, self.search_id, None)
+                        except Exception:
+                            pass
 
     async def flush(self) -> None:
         """Stop periodic task, flush remaining grouped entries, clear state."""

@@ -9,8 +9,7 @@ from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import (
     LISTING_DESC_PREFIX,
-    listing_desc_button_view,
-    product_embed,
+    product_layout_view,
     truncate_description,
 )
 from dealsnoop.config import GUILD_ID
@@ -242,9 +241,10 @@ class Client(commands.Bot):
             url=listing["url"],
             img=listing["img"],
         )
-        embed = product_embed(product, None, None, description=desc_display)
-        view = listing_desc_button_view(listing_id_str, new_expanded)
-        await interaction.edit_original_response(embed=embed, view=view)
+        view = product_layout_view(
+            product, None, None, desc_display, listing_id_str, new_expanded
+        )
+        await interaction.edit_original_response(embed=None, view=view)
 
     async def send_embed(
         self,
@@ -253,12 +253,31 @@ class Client(commands.Bot):
         thought_trace: str | None = None,
         search_id: str | None = None,
         listing_id: str | None = None,
-        view: discord.ui.LayoutView | None = None,
+        view: discord.ui.View | None = None,
     ) -> None:
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
         msg = await channel.send(embed=embed, view=view)
+        if listing_id:
+            self._searches.record_listing_message(msg.id, listing_id, channel_id)
+        elif search_id:
+            trace = (thought_trace or "").strip() or None
+            self.record_listing_metadata(msg.id, channel_id, search_id, trace)
+
+    async def send_layout(
+        self,
+        view: discord.ui.LayoutView,
+        channel_id: int,
+        listing_id: str | None = None,
+        search_id: str | None = None,
+        thought_trace: str | None = None,
+    ) -> None:
+        """Send a Components V2 LayoutView (no embeds)."""
+        channel = self.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        msg = await channel.send(view=view)
         if listing_id:
             self._searches.record_listing_message(msg.id, listing_id, channel_id)
         elif search_id:

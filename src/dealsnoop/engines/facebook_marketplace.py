@@ -234,7 +234,7 @@ class FacebookEngine:
             listing_id = re.search(r"/marketplace/item/(\d+)", product.url)
             listing_id = listing_id.group(1) if listing_id else None
             if listing_id:
-                from dealsnoop.bot.embeds import truncate_description, listing_desc_button_view
+                from dealsnoop.bot.embeds import truncate_description, product_layout_view
 
                 watch_cmd = build_watch_command(search, search.channel)
                 trace = (thought_trace or "").strip() or None
@@ -252,10 +252,11 @@ class FacebookEngine:
                     watch_command=watch_cmd,
                 )
                 truncated_desc = truncate_description(description)
-                embed = product_embed(product, distance, duration, description=truncated_desc)
-                view = listing_desc_button_view(listing_id, expanded=False)
-                await self.snoop.bot.send_embed(
-                    embed, search.channel, listing_id=listing_id, view=view
+                view = product_layout_view(
+                    product, distance, duration, truncated_desc, listing_id, expanded=False
+                )
+                await self.snoop.bot.send_layout(
+                    view, search.channel, listing_id=listing_id
                 )
             else:
                 embed = product_embed(product, distance, duration)

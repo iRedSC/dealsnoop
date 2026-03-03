@@ -1,6 +1,5 @@
 ---
-description: How to run and use the Dealsnoop Facebook Marketplace Discord notifier
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Dealsnoop System Usage
@@ -11,10 +10,10 @@ Dealsnoop is a Discord bot that watches Facebook Marketplace for listings matchi
 
 ## Required Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `BOT_TOKEN` | Discord bot token from the Discord Developer Portal |
-| `DB_URL` | PostgreSQL connection URL, e.g. `postgresql://user:password@host:5432/dbname` |
+| Variable    | Description                                                                   |
+| ----------- | ----------------------------------------------------------------------------- |
+| `BOT_TOKEN` | Discord bot token from the Discord Developer Portal                           |
+| `DB_URL`    | PostgreSQL connection URL, e.g. `postgresql://user:password@host:5432/dbname` |
 
 Optional: `FILE_PATH` (data file prefix), `GUILD_ID`, `DEFAULT_CHANNEL_ID` — see [config.py](src/dealsnoop/config.py).
 
@@ -31,12 +30,12 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 
 ## Discord Slash Commands
 
-| Command | Description |
-|---------|-------------|
-| `/watch` | Add a search: terms, target_price, context, city_code, days_listed, radius, channel_id |
-| `/list` | List all watched searches |
-| `/unwatch <id>` | Remove a search by id |
-| `/searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear |
+| Command                                    | Description                                                                            |
+| ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `/watch`                                   | Add a search: terms, target_price, context, city_code, days_listed, radius, channel_id |
+| `/list`                                    | List all watched searches                                                              |
+| `/unwatch <id>`                            | Remove a search by id                                                                  |
+| `/searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear                               |
 
 ## Discord Permissions
 
@@ -44,7 +43,7 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 
 ## Listing Feed
 
-The listing feed shows all processed listings (kept and skipped) with reasons. Enable it with `/searchfeed setchannel #channel`. Each search run produces embeds with: outcome (KEPT/SKIPPED), title, price (when available), and reason. Output goes to both the feed channel and the console log.
+The listing feed shows all processed listings (kept and skipped) with reasons. Enable it with `/searchfeed setchannel #channel`. Each search run produces Components V2 layouts with: outcome (KEPT/SKIPPED), title, price (when available), and reason. Output goes to both the feed channel and the console log.
 
 ## Listing Log Pattern
 
@@ -57,16 +56,16 @@ Imperative `logger` calls remain for non-listing operational logs (cache, browse
 
 ## Code Layout
 
-| Path | Purpose |
-|------|---------|
-| `src/dealsnoop/main.py` | Entry point; wires bot, Snoop, engines, commands |
-| `src/dealsnoop/store.py` | PostgreSQL SearchStore, bot_config (feed_channel_id) |
-| `src/dealsnoop/snoop.py` | Orchestrates engines and Discord bot |
-| `src/dealsnoop/listing_log.py` | ListingLog, SearchLogCollector |
-| `src/dealsnoop/bot/commands.py` | Slash command handlers |
-| `src/dealsnoop/bot/embeds.py` | product_embed, search_config_embed, listing_feed_embeds |
-| `src/dealsnoop/engines/facebook_marketplace.py` | Facebook Marketplace search engine |
-| `src/dealsnoop/search_config.py` | SearchConfig dataclass |
+| Path                                            | Purpose                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `src/dealsnoop/main.py`                         | Entry point; wires bot, Snoop, engines, commands                                                |
+| `src/dealsnoop/store.py`                        | PostgreSQL SearchStore, bot_config (feed_channel_id)                                            |
+| `src/dealsnoop/snoop.py`                        | Orchestrates engines and Discord bot                                                            |
+| `src/dealsnoop/listing_log.py`                  | ListingLog, SearchLogCollector                                                                  |
+| `src/dealsnoop/bot/commands.py`                 | Slash command handlers                                                                          |
+| `src/dealsnoop/bot/embeds.py`                   | product_embed, product_layout_view, search_config_embed, grouped/individual_listing_feed_layout |
+| `src/dealsnoop/engines/facebook_marketplace.py` | Facebook Marketplace search engine                                                              |
+| `src/dealsnoop/search_config.py`                | SearchConfig dataclass                                                                          |
 
 ## Database
 
