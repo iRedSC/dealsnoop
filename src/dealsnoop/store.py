@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS searches (
     terms JSONB NOT NULL,
     channel BIGINT NOT NULL,
     city_code VARCHAR(50) NOT NULL DEFAULT '107976589222439',
+    location_name TEXT,
     target_price VARCHAR(50),
     days_listed INT NOT NULL DEFAULT 1,
     radius INT NOT NULL DEFAULT 30,
@@ -40,6 +41,13 @@ CREATE TABLE IF NOT EXISTS user_locations (
 );
 """
 
+LOCATION_CACHE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS location_cache (
+    city_code VARCHAR(50) PRIMARY KEY,
+    location_name TEXT NOT NULL
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -50,6 +58,7 @@ def _row_to_config(row: dict) -> SearchConfig:
         terms=terms,
         channel=row["channel"],
         city_code=row["city_code"],
+        location_name=row.get("location_name"),
         target_price=row["target_price"],
         days_listed=row["days_listed"],
         radius=row["radius"],
@@ -80,7 +89,9 @@ class SearchStore:
             conn.execute(CREATE_TABLE_SQL)
             conn.execute(BOT_CONFIG_TABLE_SQL)
             conn.execute(USER_LOCATIONS_TABLE_SQL)
+            conn.execute(LOCATION_CACHE_TABLE_SQL)
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
+            conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
             conn.commit()
         logger.info("Database schema initialized.")
 
@@ -90,12 +101,15 @@ class SearchStore:
         with self._get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO searches (id, terms, channel, city_code, target_price, days_listed, radius, context)
-                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+                INSERT INTO searches (
+                    id, terms, channel, city_code, location_name, target_price, days_listed, radius, context
+                )
+                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     terms = EXCLUDED.terms,
                     channel = EXCLUDED.channel,
                     city_code = EXCLUDED.city_code,
+                    location_name = EXCLUDED.location_name,
                     target_price = EXCLUDED.target_price,
                     days_listed = EXCLUDED.days_listed,
                     radius = EXCLUDED.radius,
@@ -106,6 +120,7 @@ class SearchStore:
                     terms_json,
                     obj.channel,
                     obj.city_code,
+                    obj.location_name,
                     obj.target_price,
                     obj.days_listed,
                     obj.radius,
@@ -207,3 +222,29 @@ class SearchStore:
             )
             conn.commit()
         return cur.rowcount > 0
+
+    def get_location_name(self, city_code: str) -> str | None:
+        """Get cached human-readable location name for a city code."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT location_name FROM location_cache WHERE city_code = %s",
+                (city_code,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return row.get("location_name")
+
+    def set_location_name(self, city_code: str, location_name: str) -> None:
+        """Cache human-readable location name for a city code."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO location_cache (city_code, location_name)
+                VALUES (%s, %s)
+                ON CONFLICT (city_code) DO UPDATE SET
+                    location_name = EXCLUDED.location_name
+                """,
+                (city_code, location_name),
+            )
+            conn.commit()

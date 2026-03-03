@@ -28,6 +28,7 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     embed.add_field(name="Terms", value="\n".join([f"`{term}`" for term in config.terms]))
     embed.add_field(name="Channel", value=f"<#{config.channel}>")
     embed.add_field(name="Marketplace Location ID", value=config.city_code)
+    embed.add_field(name="Marketplace Location", value=config.location_name or "—")
     embed.add_field(name="Target Price", value=f"${config.target_price}" if config.target_price else "—")
     embed.add_field(name="Radius", value=f"{config.radius} mi")
     embed.add_field(name="Context", value=config.context or "—")

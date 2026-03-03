@@ -1,6 +1,7 @@
 """Facebook Marketplace search engine using Selenium and BeautifulSoup."""
 
 import asyncio
+from dataclasses import replace
 import random
 import re
 
@@ -109,6 +110,18 @@ class FacebookEngine:
             listings += soup.find_all('a')
             await asyncio.sleep(1)
         return (listings, origin)
+
+    async def get_location_for_city_code(self, city_code: str) -> str:
+        """Resolve a human-readable location name from a Marketplace city code."""
+        url = (
+            f"https://www.facebook.com/marketplace/{city_code}/search"
+            "?query=a&sortBy=creation_time_descend&daysSinceListed=1&exact=false&radius_in_km=30"
+        )
+        await asyncio.to_thread(self.browser.get, url)
+        await asyncio.sleep(3)  # Allow JS to render before reading page source.
+        html = await asyncio.to_thread(lambda: self.browser.page_source)
+        soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
+        return self._extract_page_location(soup)
     
 
     def _title_from_link(self, link: Tag) -> str:
@@ -140,6 +153,9 @@ class FacebookEngine:
         collector.start()
 
         links, origin = await self.gather_listings(search, sort)
+        self.snoop.searches.set_location_name(search.city_code, origin)
+        if search.location_name != origin:
+            self.snoop.searches.add_object(replace(search, location_name=origin))
         logger.info(f"$G${search.id}$W$: found {len(links)} links on page")
         for link in links:
             passed, skip_reason = self.validate_listing(link)

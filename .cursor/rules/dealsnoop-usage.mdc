@@ -38,6 +38,10 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 | `/unwatch <id>` | Remove a search by id |
 | `/searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear |
 
+## Discord Permissions
+
+- The bot needs `Manage Channels` permission to auto-create location categories and watch channels when `/watch` is used without `channel_id`.
+
 ## Listing Feed
 
 The listing feed shows all processed listings (kept and skipped) with reasons. Enable it with `/searchfeed setchannel #channel`. Each search run produces embeds with: outcome (KEPT/SKIPPED), title, price (when available), and reason. Output goes to both the feed channel and the console log.

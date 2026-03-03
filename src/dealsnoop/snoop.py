@@ -38,6 +38,24 @@ class Snoop:
         for engine in self.engines:
             await engine.run_search_now()
 
+    async def get_location_for_city_code(self, city_code: str) -> str:
+        """Resolve and cache human-readable location name for a city code."""
+        cached = self.searches.get_location_name(city_code)
+        if cached:
+            return cached
+
+        for engine in self.engines:
+            resolver = getattr(engine, "get_location_for_city_code", None)
+            if resolver is None:
+                continue
+            location_name = await resolver(city_code)
+            self.searches.set_location_name(city_code, location_name)
+            return location_name
+
+        logger.warning("No engine available to resolve city code %s; using city code as fallback.", city_code)
+        self.searches.set_location_name(city_code, city_code)
+        return city_code
+
     async def on_ready(self):
         for engine in self.engines:
             engine.event_loop.start()

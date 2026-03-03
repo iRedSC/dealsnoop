@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
@@ -32,9 +33,63 @@ def _parse_city_code(value: str) -> str:
     return city_code
 
 
+def _slugify_discord_name(value: str, fallback: str) -> str:
+    """Build a Discord-safe lowercase name using letters, numbers, and hyphens."""
+    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    text = normalized.lower().replace("_", "-")
+    text = re.sub(r"[^a-z0-9-]+", "-", text)
+    text = re.sub(r"-{2,}", "-", text)
+    text = text[:100]
+    return text if text else fallback
+
+
 class Commands(commands.Cog):
     def __init__(self, snoop: Snoop):
         self.snoop = snoop
+
+    async def _respond(
+        self,
+        interaction: discord.Interaction,
+        *,
+        content: str | None = None,
+        embed: discord.Embed | None = None,
+    ) -> None:
+        """Send response to initial interaction or followup after defer."""
+        if interaction.response.is_done():
+            await interaction.followup.send(content=content, embed=embed)
+            return
+        await interaction.response.send_message(content=content, embed=embed)
+
+    async def _get_or_create_location_category(
+        self,
+        guild: discord.Guild,
+        location_name: str,
+    ) -> discord.CategoryChannel:
+        """Find or create category for a location."""
+        category_name = _slugify_discord_name(location_name, "marketplace")
+        existing = discord.utils.get(guild.categories, name=category_name)
+        if existing is not None:
+            return existing
+        return await guild.create_category(category_name)
+
+    async def _create_watch_channel(
+        self,
+        interaction: discord.Interaction,
+        search_id: str,
+        city_code: str,
+    ) -> tuple[int, str]:
+        """Create a text channel for a watch under location category."""
+        guild = interaction.guild
+        if guild is None and interaction.guild_id is not None:
+            guild = self.snoop.bot.get_guild(interaction.guild_id)
+        if guild is None:
+            raise ValueError("Cannot create channel outside a server.")
+
+        location_name = await self.snoop.get_location_for_city_code(city_code)
+        category = await self._get_or_create_location_category(guild, location_name)
+        channel_name = _slugify_discord_name(search_id, "watch")
+        channel = await guild.create_text_channel(channel_name, category=category)
+        return (channel.id, location_name)
 
     @discord.app_commands.command(name="watch", description="Watch for a specific item on various marketplaces.")
     async def watch(
@@ -56,19 +111,21 @@ class Commands(commands.Cog):
                 if stored.id == search_id:
                     search_id = search_id + "_"
 
-            if channel_id:
-                channel = _parse_channel_id(channel_id)
-            elif interaction.channel_id is not None:
-                channel = interaction.channel_id
-            else:
-                await interaction.response.send_message(
-                    "ERROR: Could not determine channel. Use this command in a channel or specify a channel ID."
-                )
-                return
             user_loc = self.snoop.searches.get_user_location(interaction.user.id)
             resolved_city_code = _parse_city_code(city_code) if city_code else (
                 user_loc.city_code if user_loc else "107976589222439"
             )
+            resolved_location_name = self.snoop.searches.get_location_name(resolved_city_code)
+
+            if channel_id:
+                channel = _parse_channel_id(channel_id)
+            else:
+                await interaction.response.defer()
+                channel, resolved_location_name = await self._create_watch_channel(
+                    interaction,
+                    search_id=search_id,
+                    city_code=resolved_city_code,
+                )
             config = SearchConfig(
                 search_id,
                 formatted_terms,
@@ -76,14 +133,22 @@ class Commands(commands.Cog):
                 target_price=target_price or None,
                 context=context or None,
                 city_code=resolved_city_code,
+                location_name=resolved_location_name,
                 days_listed=days_listed,
                 radius=radius,
             )
             self.snoop.searches.add_object(config)
             embed = search_config_embed(config)
-            await interaction.response.send_message(embed=embed)
+            await self._respond(interaction, embed=embed)
         except ValueError as e:
-            await interaction.response.send_message(f"ERROR: {e}")
+            await self._respond(interaction, content=f"ERROR: {e}")
+        except discord.Forbidden:
+            await self._respond(
+                interaction,
+                content="ERROR: I need Manage Channels permission to create category/channel automatically.",
+            )
+        except discord.HTTPException as e:
+            await self._respond(interaction, content=f"ERROR: Failed to create channel/category: {e}")
 
     @discord.app_commands.command(name="list", description="List searches currently being watched.")
     async def list_searches(self, interaction: discord.Interaction) -> None:
