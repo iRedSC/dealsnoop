@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
@@ -51,16 +53,19 @@ class Client(commands.Bot):
         async def show_ai_reasoning(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
-            meta = self._searches.get_listing_metadata(message.id)
+            await interaction.response.defer(ephemeral=True)
+            meta = await asyncio.to_thread(
+                self._searches.get_listing_metadata, message.id
+            )
             if meta is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No metadata for this message.",
                     ephemeral=True,
                 )
                 return
             thought_trace = meta.get("thought_trace")
             if not thought_trace:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No AI reasoning for this message (e.g. feed-only listing).",
                     ephemeral=True,
                 )
@@ -74,23 +79,28 @@ class Client(commands.Bot):
                 description=text,
                 color=0x5865F2,
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
         @self.tree.context_menu(name="Get watch command")
         async def get_watch_command(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
-            meta = self._searches.get_listing_metadata(message.id)
+            await interaction.response.defer(ephemeral=True)
+            meta = await asyncio.to_thread(
+                self._searches.get_listing_metadata, message.id
+            )
             if meta is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No watch found for this message.",
                     ephemeral=True,
                 )
                 return
             search_id = meta["search_id"]
-            config = self._searches.get_config_by_id(search_id)
+            config = await asyncio.to_thread(
+                self._searches.get_config_by_id, search_id
+            )
             if config is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Watch already removed.",
                     ephemeral=True,
                 )
@@ -112,7 +122,7 @@ class Client(commands.Bot):
                 f"radius:{config.radius}",
             ])
             cmd = "/watch " + " ".join(parts)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"```\n{cmd}\n```",
                 ephemeral=True,
             )
@@ -121,23 +131,28 @@ class Client(commands.Bot):
         async def remove_watch(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
-            meta = self._searches.get_listing_metadata(message.id)
+            await interaction.response.defer(ephemeral=True)
+            meta = await asyncio.to_thread(
+                self._searches.get_listing_metadata, message.id
+            )
             if meta is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No watch found for this message.",
                     ephemeral=True,
                 )
                 return
             search_id = meta["search_id"]
-            config = self._searches.get_config_by_id(search_id)
+            config = await asyncio.to_thread(
+                self._searches.get_config_by_id, search_id
+            )
             if config is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Watch already removed.",
                     ephemeral=True,
                 )
                 return
-            self._searches.remove_object(config)
-            await interaction.response.send_message(
+            await asyncio.to_thread(self._searches.remove_object, config)
+            await interaction.followup.send(
                 f"Removed watch {search_id}.",
                 ephemeral=True,
             )
