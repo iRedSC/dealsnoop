@@ -24,6 +24,14 @@ def _parse_channel_id(value: str) -> int:
     raise ValueError("Channel ID must be a number or channel mention (e.g. <#123456789>)")
 
 
+def _parse_city_code(value: str) -> str:
+    """Parse and validate a Marketplace city/location code."""
+    city_code = value.strip()
+    if not city_code.isdigit():
+        raise ValueError("City code must be numeric (example: 107976589222439).")
+    return city_code
+
+
 class Commands(commands.Cog):
     def __init__(self, snoop: Snoop):
         self.snoop = snoop
@@ -35,7 +43,7 @@ class Commands(commands.Cog):
         terms: str,
         target_price: str = "",
         context: str = "",
-        city_code: str = "107976589222439",
+        city_code: str = "",
         days_listed: int = 1,
         radius: int = 30,
         channel_id: str | None = None,
@@ -57,13 +65,17 @@ class Commands(commands.Cog):
                     "ERROR: Could not determine channel. Use this command in a channel or specify a channel ID."
                 )
                 return
+            user_loc = self.snoop.searches.get_user_location(interaction.user.id)
+            resolved_city_code = _parse_city_code(city_code) if city_code else (
+                user_loc.city_code if user_loc else "107976589222439"
+            )
             config = SearchConfig(
                 search_id,
                 formatted_terms,
                 channel,
                 target_price=target_price or None,
                 context=context or None,
-                city_code=city_code,
+                city_code=resolved_city_code,
                 days_listed=days_listed,
                 radius=radius,
             )
@@ -128,6 +140,27 @@ class Commands(commands.Cog):
         except Exception as e:
             logger.exception("Forcesearch failed")
             await interaction.followup.send(f"Search failed: {e}")
+
+    location = discord.app_commands.Group(name="location", description="Manage your default Marketplace location.")
+
+    @location.command(name="set", description="Set your default Marketplace location code.")
+    async def location_set(self, interaction: discord.Interaction, city_code: str) -> None:
+        try:
+            parsed_city_code = _parse_city_code(city_code)
+            self.snoop.searches.set_user_location(interaction.user.id, parsed_city_code)
+            await interaction.response.send_message(
+                f"Default Marketplace location set to `{parsed_city_code}`."
+            )
+        except ValueError as e:
+            await interaction.response.send_message(f"ERROR: {e}")
+
+    @location.command(name="remove", description="Remove your default Marketplace location code.")
+    async def location_remove(self, interaction: discord.Interaction) -> None:
+        removed = self.snoop.searches.remove_user_location(interaction.user.id)
+        if removed:
+            await interaction.response.send_message("Location removed.")
+        else:
+            await interaction.response.send_message("No location set for your account.")
 
     searchfeed = discord.app_commands.Group(name="searchfeed", description="Configure the listing feed channel.")
 

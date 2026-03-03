@@ -70,18 +70,45 @@ class FacebookEngine:
 
 
         return (date, description)
-    
-    async def gather_listings(self, search: SearchConfig, sort: str):
+
+    def _extract_page_location(self, soup: BeautifulSoup) -> str:
+        """Extract the marketplace search origin location from the loaded page."""
+        strict_selector = (
+            "span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv"
+            ".xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.xudqn12.x3x7a5m.x6prxxf"
+            ".xvq8zen.x1s688f.x1fey0fg[dir='auto']"
+        )
+        city_state_pattern = re.compile(r"^[A-Za-z][A-Za-z .'-]+,\s*[A-Za-z][A-Za-z .'-]+$")
+
+        for span in soup.select(strict_selector):
+            text = span.get_text(" ", strip=True)
+            if city_state_pattern.match(text):
+                return text
+
+        for span in soup.select("span[dir='auto']"):
+            text = span.get_text(" ", strip=True)
+            if not city_state_pattern.match(text):
+                continue
+            parent_text = span.parent.get_text(" ", strip=True) if span.parent else ""
+            if "Within" in parent_text:
+                return text
+
+        return "Harrisburg, PA"
+
+    async def gather_listings(self, search: SearchConfig, sort: str) -> tuple[list[Tag], str]:
         listings = []
+        origin = "Harrisburg, PA"
         for term in search.terms:
             url = f'https://www.facebook.com/marketplace/{search.city_code}/search?query={term}&sortBy={sort}&daysSinceListed={search.days_listed}&exact=false&radius_in_km={search.radius}'
             await asyncio.to_thread(self.browser.get, url)
             await asyncio.sleep(3)  # Allow JS to render (marketplace listings load dynamically)
             html = await asyncio.to_thread(lambda: self.browser.page_source)
             soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
+            if origin == "Harrisburg, PA":
+                origin = self._extract_page_location(soup)
             listings += soup.find_all('a')
             await asyncio.sleep(1)
-        return listings
+        return (listings, origin)
     
 
     def _title_from_link(self, link: Tag) -> str:
@@ -112,7 +139,7 @@ class FacebookEngine:
         )
         collector.start()
 
-        links = await self.gather_listings(search, sort)
+        links, origin = await self.gather_listings(search, sort)
         logger.info(f"$G${search.id}$W$: found {len(links)} links on page")
         for link in links:
             passed, skip_reason = self.validate_listing(link)
@@ -144,7 +171,7 @@ class FacebookEngine:
                 title = lines[-2] if len(lines) >= 2 else (lines[-1] if lines else "")
                 location = lines[-1] if lines else ""
 
-            distance, duration = await get_distance_and_duration("Harrisburg, PA", location)
+            distance, duration = await get_distance_and_duration(origin, location)
             if distance > search.radius:
                 url, img = self._url_and_img_from_link(link)
                 collector.add_grouped(

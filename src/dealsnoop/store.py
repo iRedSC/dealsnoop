@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 from dealsnoop.logger import logger
 from dealsnoop.search_config import SearchConfig
+from dealsnoop.user_location import UserLocation
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS searches (
@@ -17,7 +18,6 @@ CREATE TABLE IF NOT EXISTS searches (
     terms JSONB NOT NULL,
     channel BIGINT NOT NULL,
     city_code VARCHAR(50) NOT NULL DEFAULT '107976589222439',
-    city VARCHAR(255) NOT NULL DEFAULT 'Harrisburg, PA',
     target_price VARCHAR(50),
     days_listed INT NOT NULL DEFAULT 1,
     radius INT NOT NULL DEFAULT 30,
@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS bot_config (
 );
 """
 
+USER_LOCATIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS user_locations (
+    user_id BIGINT PRIMARY KEY,
+    city_code VARCHAR(50) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -42,7 +50,6 @@ def _row_to_config(row: dict) -> SearchConfig:
         terms=terms,
         channel=row["channel"],
         city_code=row["city_code"],
-        city=row["city"],
         target_price=row["target_price"],
         days_listed=row["days_listed"],
         radius=row["radius"],
@@ -72,6 +79,8 @@ class SearchStore:
         with self._get_conn() as conn:
             conn.execute(CREATE_TABLE_SQL)
             conn.execute(BOT_CONFIG_TABLE_SQL)
+            conn.execute(USER_LOCATIONS_TABLE_SQL)
+            conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.commit()
         logger.info("Database schema initialized.")
 
@@ -81,13 +90,12 @@ class SearchStore:
         with self._get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO searches (id, terms, channel, city_code, city, target_price, days_listed, radius, context)
-                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO searches (id, terms, channel, city_code, target_price, days_listed, radius, context)
+                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     terms = EXCLUDED.terms,
                     channel = EXCLUDED.channel,
                     city_code = EXCLUDED.city_code,
-                    city = EXCLUDED.city,
                     target_price = EXCLUDED.target_price,
                     days_listed = EXCLUDED.days_listed,
                     radius = EXCLUDED.radius,
@@ -98,7 +106,6 @@ class SearchStore:
                     terms_json,
                     obj.channel,
                     obj.city_code,
-                    obj.city,
                     obj.target_price,
                     obj.days_listed,
                     obj.radius,
@@ -163,3 +170,40 @@ class SearchStore:
                     ("feed_channel_id", str(channel_id)),
                 )
             conn.commit()
+
+    def get_user_location(self, user_id: int) -> UserLocation | None:
+        """Get marketplace location settings for a user."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT user_id, city_code FROM user_locations WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return UserLocation(user_id=int(row["user_id"]), city_code=row["city_code"])
+
+    def set_user_location(self, user_id: int, city_code: str) -> None:
+        """Set or update a user's marketplace location settings."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_locations (user_id, city_code)
+                VALUES (%s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    city_code = EXCLUDED.city_code,
+                    updated_at = NOW()
+                """,
+                (user_id, city_code),
+            )
+            conn.commit()
+
+    def remove_user_location(self, user_id: int) -> bool:
+        """Remove marketplace location settings for a user."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM user_locations WHERE user_id = %s",
+                (user_id,),
+            )
+            conn.commit()
+        return cur.rowcount > 0
