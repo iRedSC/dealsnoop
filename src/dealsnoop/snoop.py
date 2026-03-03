@@ -60,3 +60,12 @@ class Snoop:
         for engine in self.engines:
             engine.event_loop.start()
         logger.info("$G$Bot started successfully.")
+
+        feed_channel_id = self.searches.get_feed_channel_id()
+        if feed_channel_id:
+            channel = self.bot.get_channel(feed_channel_id)
+            if channel is not None:
+                try:
+                    await channel.send("Bot started successfully.")
+                except Exception:
+                    pass
