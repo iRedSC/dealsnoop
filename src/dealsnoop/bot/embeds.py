@@ -36,6 +36,28 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
+def list_searches_embed(searches: list[SearchConfig]) -> discord.Embed:
+    """Build embed for `/list` command showing watched searches."""
+    embed = discord.Embed(title="Watched Searches", color=0x03B2F8)
+    if not searches:
+        embed.description = "No watched searches."
+        return embed
+
+    for search in searches[:25]:
+        terms = ", ".join(search.terms) if search.terms else "—"
+        location = search.location_name or search.city_code or "—"
+        value = (
+            f"Terms: {terms}\n"
+            f"Location: {location}\n"
+            f"Channel: <#{search.channel}>"
+        )
+        embed.add_field(name=search.id, value=value, inline=False)
+
+    if len(searches) > 25:
+        embed.set_footer(text=f"Showing first 25 of {len(searches)} watches.")
+    return embed
+
+
 _PLACEHOLDER_IMG = "https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353"
 
 

@@ -8,7 +8,7 @@ import unicodedata
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
-from dealsnoop.bot.embeds import search_config_embed
+from dealsnoop.bot.embeds import list_searches_embed, search_config_embed
 from dealsnoop.logger import logger
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
@@ -41,6 +41,26 @@ def _slugify_discord_name(value: str, fallback: str) -> str:
     text = re.sub(r"-{2,}", "-", text)
     text = text[:100]
     return text if text else fallback
+
+
+def _get_base_id(search_id: str) -> str:
+    """Return base id by stripping a trailing numeric suffix (_N)."""
+    parts = search_id.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+    return search_id
+
+
+def _make_search_id(terms: tuple[str, ...], existing_ids: set[str]) -> str:
+    """Create a normalized and collision-safe watch id from first term."""
+    first_term = terms[0] if terms else "watch"
+    candidate = first_term.lower().replace(" ", "_")
+    candidate = re.sub(r"[^a-z0-9_]+", "", candidate)
+    candidate = re.sub(r"_{2,}", "_", candidate).strip("_")
+    base_id = candidate or "watch"
+
+    count = sum(1 for existing_id in existing_ids if _get_base_id(existing_id) == base_id)
+    return base_id if count == 0 else f"{base_id}_{count + 1}"
 
 
 class Commands(commands.Cog):
@@ -105,11 +125,8 @@ class Commands(commands.Cog):
     ) -> None:
         try:
             formatted_terms = tuple(term.strip() for term in terms.split(","))
-            search_id = formatted_terms[0].replace(" ", "_")
-
-            for stored in self.snoop.searches.get_all_objects():
-                if stored.id == search_id:
-                    search_id = search_id + "_"
+            existing_ids = {search.id for search in self.snoop.searches.get_all_objects()}
+            search_id = _make_search_id(formatted_terms, existing_ids)
 
             user_loc = self.snoop.searches.get_user_location(interaction.user.id)
             resolved_city_code = _parse_city_code(city_code) if city_code else (
@@ -152,9 +169,8 @@ class Commands(commands.Cog):
 
     @discord.app_commands.command(name="list", description="List searches currently being watched.")
     async def list_searches(self, interaction: discord.Interaction) -> None:
-        lines = [f"`{s.id}` {s.terms}" for s in self.snoop.searches.get_all_objects()]
-        msg = "\n".join(lines) if lines else "No watched searches"
-        await interaction.response.send_message(msg)
+        searches = sorted(self.snoop.searches.get_all_objects(), key=lambda s: s.id)
+        await interaction.response.send_message(embed=list_searches_embed(searches))
 
     async def _unwatch_id_autocomplete(
         self,
@@ -165,7 +181,7 @@ class Commands(commands.Cog):
         searches = self.snoop.searches.get_all_objects()
         current_lower = current.lower()
         choices = [
-            discord.app_commands.Choice(name=f"{s.id} — {', '.join(s.terms)}", value=s.id)
+            discord.app_commands.Choice(name=s.id, value=s.id)
             for s in searches
             if not current_lower or current_lower in s.id.lower() or any(current_lower in t.lower() for t in s.terms)
         ]
