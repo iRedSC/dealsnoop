@@ -294,25 +294,32 @@ class FacebookEngine:
         if not target_price:
             target_price = "(no max price)"
         response = await asyncio.to_thread(self.chatgpt.responses.create,
-        model="gpt-4.1-mini",
+        model="gpt-5-mini",
+        reasoning={"effort": "medium", "summary": "auto"},
         input=f"""
-    Think it through shortly, then answer with || and 'True' or 'False'. If and once you determine false, stop the thought process and return false.
+Evaluate this Facebook Marketplace listing and return True or False.
 
-    Example: "<your thoughts> || True"
+Criteria:
+- The listing must actually be selling '{terms}', not an ISO/WTB post, parts-only, or unrelated item.
+- The listing must appear to be a real, usable item — not a scam or broken/for-parts (unless '{context}' says otherwise).
+- Price must be at or below ${target_price}. Only allow higher if the item is a genuinely strong deal. Context: '{context}'
 
-    I am searching for '{terms}', for a rough max price of {target_price} (can be slightly higher).
-    Additional Context: '{context}'.
+Listing:
+Title: {title}
+Description: {description}
+Price: ${price}
 
-    Here is the listing:
-    ```
-    {title}
-    {description}
-    ```
-    Is the listing what I'm looking for, and is {price} a good price for it?
-    If the listing is above the max price but is a very good deal anyway, respond True; only do this if the listing is actually what is being looked for.
+Respond with only True or False.
     """)
-        parts = response.output_text.split("|| ")
-        thought_trace = parts[0].strip() if parts else ""
-        passed = len(parts) > 1 and parts[-1].lower() == "true"
+        text = (response.output_text or "").strip().lower()
+        match = re.search(r"\b(true|false)\b", text)
+        passed = match.group(1) == "true" if match else True
+        thought_trace = ""
+        for item in getattr(response, "output", []) or []:
+            if getattr(item, "type", None) == "reasoning" and getattr(item, "summary", None):
+                parts = [s.text for s in item.summary if getattr(s, "text", None)]
+                if parts:
+                    thought_trace = "\n".join(parts)
+                    break
         return (passed, thought_trace)
 
