@@ -151,7 +151,15 @@ class Client(commands.Bot):
                     ephemeral=True,
                 )
                 return
-            await asyncio.to_thread(self._searches.remove_object, config)
+            removed = await asyncio.to_thread(
+                self._searches.remove_by_id, search_id
+            )
+            if not removed:
+                await interaction.followup.send(
+                    "Watch could not be removed (may have been deleted already).",
+                    ephemeral=True,
+                )
+                return
             await interaction.followup.send(
                 f"Removed watch {search_id}.",
                 ephemeral=True,

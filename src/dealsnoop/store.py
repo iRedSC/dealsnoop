@@ -142,11 +142,18 @@ class SearchStore:
 
     def remove_object(self, obj: SearchConfig) -> None:
         """Remove a SearchConfig from the store by id."""
+        self.remove_by_id(obj.id)
+
+    def remove_by_id(self, search_id: str) -> bool:
+        """Remove a search from the store by id. Returns True if a row was deleted."""
         with self._get_conn() as conn:
-            cur = conn.execute("DELETE FROM searches WHERE id = %s", (obj.id,))
+            cur = conn.execute("DELETE FROM searches WHERE id = %s", (search_id,))
             conn.commit()
             if cur.rowcount == 0:
-                logger.warning(f"Search config '{obj.id}' not found in store.")
+                logger.warning(f"Search config '{search_id}' not found in store.")
+                return False
+            logger.info(f"Search config '{search_id}' removed from store.")
+            return True
 
     def get_all_objects(self) -> set[SearchConfig]:
         """Retrieve all SearchConfig objects from the store."""
