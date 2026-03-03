@@ -1,5 +1,7 @@
 """Search configuration for marketplace watches."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
