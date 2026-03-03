@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import TypedDict
 
 import psycopg
 from psycopg.rows import dict_row
@@ -11,6 +12,22 @@ from psycopg.rows import dict_row
 from dealsnoop.logger import logger
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.user_location import UserLocation
+
+
+class ListingRow(TypedDict):
+    """Row from listings table."""
+
+    id: str
+    search_id: str
+    title: str
+    description: str
+    price: float
+    location: str
+    date: str
+    url: str
+    img: str
+    thought_trace: str | None
+    watch_command: str
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS searches (
@@ -57,6 +74,31 @@ CREATE TABLE IF NOT EXISTS listing_metadata (
 );
 """
 
+LISTINGS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS listings (
+    id VARCHAR(255) PRIMARY KEY,
+    search_id VARCHAR(255) NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    price REAL NOT NULL,
+    location TEXT NOT NULL,
+    date TEXT NOT NULL,
+    url TEXT NOT NULL,
+    img TEXT NOT NULL,
+    thought_trace TEXT,
+    watch_command TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+LISTING_MESSAGES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS listing_messages (
+    message_id BIGINT PRIMARY KEY,
+    listing_id VARCHAR(255) NOT NULL REFERENCES listings(id),
+    channel_id BIGINT NOT NULL
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -100,6 +142,8 @@ class SearchStore:
             conn.execute(USER_LOCATIONS_TABLE_SQL)
             conn.execute(LOCATION_CACHE_TABLE_SQL)
             conn.execute(LISTING_METADATA_TABLE_SQL)
+            conn.execute(LISTINGS_TABLE_SQL)
+            conn.execute(LISTING_MESSAGES_TABLE_SQL)
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
             conn.commit()
@@ -204,6 +248,100 @@ class SearchStore:
         if not row:
             return None
         return {"search_id": row["search_id"], "thought_trace": row.get("thought_trace")}
+
+    def insert_listing(
+        self,
+        listing_id: str,
+        search_id: str,
+        title: str,
+        description: str,
+        price: float,
+        location: str,
+        date: str,
+        url: str,
+        img: str,
+        thought_trace: str | None,
+        watch_command: str,
+    ) -> None:
+        """Insert or upsert a listing into the listings table."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO listings (
+                    id, search_id, title, description, price, location,
+                    date, url, img, thought_trace, watch_command
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    search_id = EXCLUDED.search_id,
+                    title = EXCLUDED.title,
+                    description = EXCLUDED.description,
+                    price = EXCLUDED.price,
+                    location = EXCLUDED.location,
+                    date = EXCLUDED.date,
+                    url = EXCLUDED.url,
+                    img = EXCLUDED.img,
+                    thought_trace = EXCLUDED.thought_trace,
+                    watch_command = EXCLUDED.watch_command
+                """,
+                (
+                    listing_id,
+                    search_id,
+                    title,
+                    description,
+                    price,
+                    location,
+                    date,
+                    url,
+                    img,
+                    thought_trace,
+                    watch_command,
+                ),
+            )
+            conn.commit()
+
+    def get_listing(self, listing_id: str) -> ListingRow | None:
+        """Return a listing by id, or None if not found."""
+        with self._get_conn() as conn:
+            cur = conn.execute("SELECT * FROM listings WHERE id = %s", (listing_id,))
+            row = cur.fetchone()
+        return dict(row) if row else None
+
+    def record_listing_message(
+        self,
+        message_id: int,
+        listing_id: str,
+        channel_id: int,
+    ) -> None:
+        """Store message_id -> listing_id mapping."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO listing_messages (message_id, listing_id, channel_id)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (message_id) DO UPDATE SET
+                    listing_id = EXCLUDED.listing_id,
+                    channel_id = EXCLUDED.channel_id
+                """,
+                (message_id, listing_id, channel_id),
+            )
+            conn.commit()
+
+    def get_listing_by_message_id(
+        self, message_id: int
+    ) -> ListingRow | None:
+        """Return listing for a Discord message, or None if not found."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                """
+                SELECT l.* FROM listings l
+                JOIN listing_messages lm ON lm.listing_id = l.id
+                WHERE lm.message_id = %s
+                """,
+                (message_id,),
+            )
+            row = cur.fetchone()
+        return dict(row) if row else None
 
     def clear_store(self) -> None:
         """Clear all SearchConfig objects from the store."""

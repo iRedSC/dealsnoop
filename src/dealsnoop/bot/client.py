@@ -7,8 +7,15 @@ import asyncio
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
+from dealsnoop.bot.embeds import (
+    LISTING_DESC_PREFIX,
+    listing_desc_button_view,
+    product_embed,
+    truncate_description,
+)
 from dealsnoop.config import GUILD_ID
 from dealsnoop.logger import logger
+from dealsnoop.product import Product
 from dealsnoop.store import SearchStore
 
 GUILD = discord.Object(GUILD_ID)
@@ -54,16 +61,16 @@ class Client(commands.Bot):
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
             await interaction.response.defer(ephemeral=True)
-            meta = await asyncio.to_thread(
-                self._searches.get_listing_metadata, message.id
+            listing = await asyncio.to_thread(
+                self._searches.get_listing_by_message_id, message.id
             )
-            if meta is None:
-                await interaction.followup.send(
-                    "No metadata for this message.",
-                    ephemeral=True,
+            if listing:
+                thought_trace = listing.get("thought_trace")
+            else:
+                meta = await asyncio.to_thread(
+                    self._searches.get_listing_metadata, message.id
                 )
-                return
-            thought_trace = meta.get("thought_trace")
+                thought_trace = meta.get("thought_trace") if meta else None
             if not thought_trace:
                 await interaction.followup.send(
                     "No AI reasoning for this message (e.g. feed-only listing).",
@@ -86,6 +93,16 @@ class Client(commands.Bot):
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
             await interaction.response.defer(ephemeral=True)
+            listing = await asyncio.to_thread(
+                self._searches.get_listing_by_message_id, message.id
+            )
+            if listing and listing.get("watch_command"):
+                cmd = listing["watch_command"]
+                await interaction.followup.send(
+                    f"```\n{cmd}\n```",
+                    ephemeral=True,
+                )
+                return
             meta = await asyncio.to_thread(
                 self._searches.get_listing_metadata, message.id
             )
@@ -105,23 +122,9 @@ class Client(commands.Bot):
                     ephemeral=True,
                 )
                 return
-            terms_escaped = [t.replace('"', '\\"') for t in config.terms]
-            terms_str = ", ".join(terms_escaped)
-            ctx_escaped = (config.context or "").replace('"', '\\"')
-            parts = [
-                f'terms:"{terms_str}"',
-                f'channel_id:{message.channel_id}',
-            ]
-            if config.target_price:
-                parts.append(f'target_price:{config.target_price}')
-            if config.context:
-                parts.append(f'context:"{ctx_escaped}"')
-            parts.extend([
-                f"city_code:{config.city_code}",
-                f"days_listed:{config.days_listed}",
-                f"radius:{config.radius}",
-            ])
-            cmd = "/watch " + " ".join(parts)
+            from dealsnoop.search_config import build_watch_command
+
+            cmd = build_watch_command(config, message.channel_id)
             await interaction.followup.send(
                 f"```\n{cmd}\n```",
                 ephemeral=True,
@@ -132,16 +135,22 @@ class Client(commands.Bot):
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
             await interaction.response.defer(ephemeral=True)
-            meta = await asyncio.to_thread(
-                self._searches.get_listing_metadata, message.id
+            listing = await asyncio.to_thread(
+                self._searches.get_listing_by_message_id, message.id
             )
-            if meta is None:
-                await interaction.followup.send(
-                    "No watch found for this message.",
-                    ephemeral=True,
+            if listing:
+                search_id = listing["search_id"]
+            else:
+                meta = await asyncio.to_thread(
+                    self._searches.get_listing_metadata, message.id
                 )
-                return
-            search_id = meta["search_id"]
+                if meta is None:
+                    await interaction.followup.send(
+                        "No watch found for this message.",
+                        ephemeral=True,
+                    )
+                    return
+                search_id = meta["search_id"]
             config = await asyncio.to_thread(
                 self._searches.get_config_by_id, search_id
             )
@@ -177,18 +186,82 @@ class Client(commands.Bot):
     async def on_ready(self) -> None:
         ...
 
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        custom_id = (
+            interaction.data.get("custom_id", "")
+            if interaction.data
+            else ""
+        )
+        if custom_id.startswith(LISTING_DESC_PREFIX):
+            await self._handle_listing_desc_toggle(interaction, custom_id)
+            return
+        await super().on_interaction(interaction)
+
+    async def _handle_listing_desc_toggle(
+        self, interaction: discord.Interaction, custom_id: str
+    ) -> None:
+        """Handle Show more/Show less button for listing description."""
+        await interaction.response.defer()
+        parts = custom_id[len(LISTING_DESC_PREFIX) :].rsplit(":", 1)
+        if len(parts) != 2:
+            await interaction.followup.send(
+                "Invalid button.",
+                ephemeral=True,
+            )
+            return
+        listing_id_str, expanded_str = parts
+        try:
+            expanded = bool(int(expanded_str))
+        except ValueError:
+            await interaction.followup.send(
+                "Invalid button.",
+                ephemeral=True,
+            )
+            return
+        listing = await asyncio.to_thread(
+            self._searches.get_listing, listing_id_str
+        )
+        if not listing:
+            await interaction.followup.send(
+                "Listing no longer available.",
+                ephemeral=True,
+            )
+            return
+        new_expanded = not expanded
+        desc_display = (
+            listing["description"]
+            if new_expanded
+            else truncate_description(listing["description"])
+        )
+        product = Product(
+            price=listing["price"],
+            title=listing["title"],
+            description=desc_display,
+            location=listing["location"],
+            date=listing["date"],
+            url=listing["url"],
+            img=listing["img"],
+        )
+        embed = product_embed(product, None, None, description=desc_display)
+        view = listing_desc_button_view(listing_id_str, new_expanded)
+        await interaction.edit_original_response(embed=embed, view=view)
+
     async def send_embed(
         self,
         embed: discord.Embed,
         channel_id: int,
         thought_trace: str | None = None,
         search_id: str | None = None,
+        listing_id: str | None = None,
+        view: discord.ui.LayoutView | None = None,
     ) -> None:
         channel = self.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return
-        msg = await channel.send(embed=embed)
-        if search_id:
+        msg = await channel.send(embed=embed, view=view)
+        if listing_id:
+            self._searches.record_listing_message(msg.id, listing_id, channel_id)
+        elif search_id:
             trace = (thought_trace or "").strip() or None
             self.record_listing_metadata(msg.id, channel_id, search_id, trace)
 

@@ -12,6 +12,7 @@ from selenium.webdriver.common.by import By  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import product_embed
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
+from dealsnoop.search_config import build_watch_command
 from dealsnoop.listing_log import SearchLogCollector
 from dealsnoop.logger import logger
 from dealsnoop.maps import get_distance_and_duration
@@ -230,10 +231,37 @@ class FacebookEngine:
                 title, "Matched", url=product.url, price=price, img=img
             )
 
-            embed = product_embed(product, distance, duration)
-            await self.snoop.bot.send_embed(
-                embed, search.channel, thought_trace=thought_trace, search_id=search.id
-            )
+            listing_id = re.search(r"/marketplace/item/(\d+)", product.url)
+            listing_id = listing_id.group(1) if listing_id else None
+            if listing_id:
+                from dealsnoop.bot.embeds import truncate_description, listing_desc_button_view
+
+                watch_cmd = build_watch_command(search, search.channel)
+                trace = (thought_trace or "").strip() or None
+                self.snoop.searches.insert_listing(
+                    listing_id=listing_id,
+                    search_id=search.id,
+                    title=title,
+                    description=description,
+                    price=price,
+                    location=location,
+                    date=product.date,
+                    url=product.url,
+                    img=img,
+                    thought_trace=trace,
+                    watch_command=watch_cmd,
+                )
+                truncated_desc = truncate_description(description)
+                embed = product_embed(product, distance, duration, description=truncated_desc)
+                view = listing_desc_button_view(listing_id, expanded=False)
+                await self.snoop.bot.send_embed(
+                    embed, search.channel, listing_id=listing_id, view=view
+                )
+            else:
+                embed = product_embed(product, distance, duration)
+                await self.snoop.bot.send_embed(
+                    embed, search.channel, thought_trace=thought_trace, search_id=search.id
+                )
 
             self.cache.save_cache()
             await asyncio.sleep(random.randint(1, 4))

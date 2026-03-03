@@ -9,11 +9,33 @@ from dealsnoop.listing_log import ListingLog
 from dealsnoop.product import Product
 from dealsnoop.search_config import SearchConfig
 
-def product_embed(product: Product, distance: float | None, duration: str | None) -> discord.Embed:
+DESCRIPTION_TRUNCATE_LINES = 3
+DESCRIPTION_TRUNCATE_CHARS = 300
+
+
+def truncate_description(
+    description: str, max_lines: int = DESCRIPTION_TRUNCATE_LINES
+) -> str:
+    """Truncate to max_lines, append '...' if truncated."""
+    lines = description.strip().splitlines()
+    if len(lines) <= max_lines:
+        return description
+    truncated = "\n".join(lines[:max_lines])
+    return truncated.rstrip() + "\n..."
+
+
+def product_embed(
+    product: Product,
+    distance: float | None,
+    duration: str | None,
+    description: str | None = None,
+) -> discord.Embed:
+    """Build product embed. Pass description to override (e.g. truncated)."""
+    desc = description if description is not None else product.description
     embed = discord.Embed(
         title=product.title,
         url=product.url,
-        description=f"**${product.price}**\n\n{product.description}",
+        description=f"**${product.price}**\n\n{desc}",
         color=0x03B2F8,
     )
     embed.set_author(name=f"{product.date}", url=product.url, icon_url="https://cdn-1.webcatalog.io/catalog/facebook-marketplace/facebook-marketplace-icon-filled-256.png?v=1714774315353")
@@ -22,6 +44,22 @@ def product_embed(product: Product, distance: float | None, duration: str | None
     if distance and duration:
         embed.set_footer(text=f"{product.location} — {round(distance)} mi ({duration})", icon_url="https://cdn-icons-png.flaticon.com/512/1076/1076983.png")
     return embed
+
+
+LISTING_DESC_PREFIX = "listing_desc:"
+
+
+def listing_desc_button_view(listing_id: str, expanded: bool) -> discord.ui.LayoutView:
+    """Build LayoutView with Show more/Show less button for description toggle."""
+    expanded_int = 1 if expanded else 0
+    custom_id = f"{LISTING_DESC_PREFIX}{listing_id}:{expanded_int}"
+    label = "Show less" if expanded else "Show more"
+    button = discord.ui.Button(label=label, custom_id=custom_id)
+    action_row = discord.ui.ActionRow(button)
+    view = discord.ui.LayoutView()
+    view.add_item(action_row)
+    return view
+
 
 def search_config_embed(config: SearchConfig) -> discord.Embed:
     embed = discord.Embed(title=f"Successfully added search: {config.id}", color=0x03B2F8)
