@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
@@ -10,17 +11,174 @@ from discord.ext import commands  # type: ignore[import-untyped]
 from dealsnoop.bot.embeds import (
     LISTING_DESC_PREFIX,
     product_layout_view,
+    search_config_embed,
     truncate_description,
 )
 from dealsnoop.config import GUILD_ID
 from dealsnoop.logger import logger
 from dealsnoop.product import Product
+from dealsnoop.search_config import SearchConfig
 from dealsnoop.store import SearchStore
+
+if TYPE_CHECKING:
+    from dealsnoop.snoop import Snoop
 
 GUILD = discord.Object(GUILD_ID)
 
+
+def _parse_city_code(value: str) -> str:
+    """Parse and validate a Marketplace city/location code."""
+    city_code = value.strip()
+    if not city_code.isdigit():
+        raise ValueError("City code must be numeric (example: 107976589222439).")
+    return city_code
+
 intents = discord.Intents.default()
 intents.message_content = True
+
+
+class UpdateWatchModal(discord.ui.Modal, title="Update watch"):
+    """Modal for editing watch values. Submitting updates the watch in the store."""
+
+    def __init__(
+        self,
+        searches: SearchStore,
+        config: SearchConfig,
+        snoop: Snoop | None,
+    ) -> None:
+        super().__init__()
+        self._searches = searches
+        self._config = config
+        self._snoop = snoop
+
+        self.terms_input = discord.ui.TextInput(
+            label="Terms (comma-separated)",
+            default=", ".join(config.terms),
+            required=True,
+            max_length=500,
+        )
+        self.target_price_input = discord.ui.TextInput(
+            label="Target price",
+            default=config.target_price or "",
+            required=False,
+            max_length=50,
+        )
+        self.context_input = discord.ui.TextInput(
+            label="Context",
+            default=config.context or "",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+        )
+        self.city_code_input = discord.ui.TextInput(
+            label="City code",
+            default=config.city_code,
+            required=True,
+            max_length=50,
+        )
+        self.radius_input = discord.ui.TextInput(
+            label="Radius (miles)",
+            default=str(config.radius),
+            required=True,
+            max_length=10,
+        )
+
+        self.add_item(self.terms_input)
+        self.add_item(self.target_price_input)
+        self.add_item(self.context_input)
+        self.add_item(self.city_code_input)
+        self.add_item(self.radius_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        terms_raw = self.terms_input.value.strip()
+        terms = tuple(t.strip() for t in terms_raw.split(",") if t.strip())
+        if not terms:
+            await interaction.response.send_message(
+                "Terms cannot be empty.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            city_code = _parse_city_code(self.city_code_input.value)
+        except ValueError as e:
+            await interaction.response.send_message(
+                f"ERROR: {e}",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            radius = int(self.radius_input.value.strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "ERROR: Radius must be a whole number.",
+                ephemeral=True,
+            )
+            return
+
+        target_price = self.target_price_input.value.strip() or None
+        context = self.context_input.value.strip() or None
+
+        location_name = self._config.location_name
+        if self._snoop is not None:
+            location_name = await self._snoop.get_location_for_city_code(city_code)
+
+        updated = SearchConfig(
+            id=self._config.id,
+            terms=terms,
+            channel=self._config.channel,
+            city_code=city_code,
+            location_name=location_name,
+            target_price=target_price,
+            days_listed=self._config.days_listed,
+            radius=radius,
+            context=context,
+        )
+        await asyncio.to_thread(self._searches.add_object, updated)
+        embed = search_config_embed(updated)
+        await interaction.response.send_message(
+            "Watch updated.",
+            embed=embed,
+            ephemeral=True,
+        )
+
+
+class UpdateContextModal(discord.ui.Modal, title="Update context"):
+    """Modal for editing only the context field of a watch."""
+
+    def __init__(self, searches: SearchStore, config: SearchConfig) -> None:
+        super().__init__()
+        self._searches = searches
+        self._config = config
+
+        self.context_input = discord.ui.TextInput(
+            label="Context",
+            default=config.context or "",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+        )
+        self.add_item(self.context_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        context = self.context_input.value.strip() or None
+        updated = SearchConfig(
+            id=self._config.id,
+            terms=self._config.terms,
+            channel=self._config.channel,
+            city_code=self._config.city_code,
+            location_name=self._config.location_name,
+            target_price=self._config.target_price,
+            days_listed=self._config.days_listed,
+            radius=self._config.radius,
+            context=context,
+        )
+        await asyncio.to_thread(self._searches.add_object, updated)
+        await interaction.response.send_message(
+            "Context updated.",
+            ephemeral=True,
+        )
 
 
 class Client(commands.Bot):
@@ -173,10 +331,77 @@ class Client(commands.Bot):
                 ephemeral=True,
             )
 
+        @self.tree.context_menu(name="Update watch")
+        async def update_watch(
+            interaction: discord.Interaction, message: discord.Message
+        ) -> None:
+            listing = await asyncio.to_thread(
+                self._searches.get_listing_by_message_id, message.id
+            )
+            if listing:
+                search_id = listing["search_id"]
+            else:
+                meta = await asyncio.to_thread(
+                    self._searches.get_listing_metadata, message.id
+                )
+                if meta is None:
+                    await interaction.response.send_message(
+                        "No watch found for this message.",
+                        ephemeral=True,
+                    )
+                    return
+                search_id = meta["search_id"]
+            config = await asyncio.to_thread(
+                self._searches.get_config_by_id, search_id
+            )
+            if config is None:
+                await interaction.response.send_message(
+                    "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            snoop = getattr(self, "_snoop", None)
+            modal = UpdateWatchModal(self._searches, config, snoop)
+            await interaction.response.send_modal(modal)
+
+        @self.tree.context_menu(name="Update context")
+        async def update_context(
+            interaction: discord.Interaction, message: discord.Message
+        ) -> None:
+            listing = await asyncio.to_thread(
+                self._searches.get_listing_by_message_id, message.id
+            )
+            if listing:
+                search_id = listing["search_id"]
+            else:
+                meta = await asyncio.to_thread(
+                    self._searches.get_listing_metadata, message.id
+                )
+                if meta is None:
+                    await interaction.response.send_message(
+                        "No watch found for this message.",
+                        ephemeral=True,
+                    )
+                    return
+                search_id = meta["search_id"]
+            config = await asyncio.to_thread(
+                self._searches.get_config_by_id, search_id
+            )
+            if config is None:
+                await interaction.response.send_message(
+                    "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            modal = UpdateContextModal(self._searches, config)
+            await interaction.response.send_modal(modal)
+
         self.tree.add_command(show_ai_reasoning, guild=GUILD)
         self.tree.add_command(get_watch_command, guild=GUILD)
         self.tree.add_command(remove_watch, guild=GUILD)
-        logger.info("Added commands 'Show AI reasoning', 'Get watch command', 'Remove watch'")
+        self.tree.add_command(update_watch, guild=GUILD)
+        self.tree.add_command(update_context, guild=GUILD)
+        logger.info("Added commands 'Show AI reasoning', 'Get watch command', 'Remove watch', 'Update watch', 'Update context'")
         for cog in self._unregistered_cogs:
             await self._register_cog(cog)
         await self.tree.sync(guild=GUILD)

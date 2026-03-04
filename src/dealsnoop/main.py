@@ -20,7 +20,7 @@ searches = SearchStore()
 
 bot = Client(searches)
 snoop = Snoop(bot, searches)
-
+bot._snoop = snoop
 
 bot.register_cog(Commands(snoop))
 snoop.register_engine(FacebookEngine(snoop))
