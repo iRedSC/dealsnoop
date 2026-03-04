@@ -76,19 +76,19 @@ class FacebookEngine:
 
     def _extract_page_location(self, soup: BeautifulSoup, city_code: str = "") -> str:
         """Extract the marketplace search origin location from the loaded page."""
-        strict_selector = (
-            "span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv"
-            ".xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.xudqn12.x3x7a5m.x6prxxf"
-            ".xvq8zen.x1s688f.x1fey0fg[dir='auto']"
+        strict_classes = (
+            "x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq x1s928wv "
+            "xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x xudqn12 x3x7a5m x6prxxf "
+            "xvq8zen x1s688f x1fey0fg"
         )
         city_state_pattern = re.compile(r"^[A-Za-z][A-Za-z .'-]+,\s*[A-Za-z][A-Za-z .'-]+$")
 
-        for span in soup.select(strict_selector):
+        for span in soup.find_all("span", class_=strict_classes, attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
             if city_state_pattern.match(text):
                 return text
 
-        for span in soup.select("span[dir='auto']"):
+        for span in soup.find_all("span", attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
             if not city_state_pattern.match(text):
                 continue
