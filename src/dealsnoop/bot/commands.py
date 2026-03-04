@@ -230,6 +230,12 @@ class Commands(commands.Cog):
                     return
                 self.snoop.searches.remove_object(search)
                 await interaction.response.send_message(f"Removed {search.terms} from watchlist")
+                if self.snoop.searches.get_cleanup_auto():
+                    guild = interaction.guild or (
+                        self.snoop.bot.get_guild(interaction.guild_id) if interaction.guild_id else None
+                    )
+                    if guild:
+                        await self.snoop.run_cleanup_async(guild)
                 return
         await interaction.response.send_message("ID not found.")
 
@@ -239,11 +245,13 @@ class Commands(commands.Cog):
         default_permissions=discord.Permissions(administrator=True),
     )
 
-    @admin.command(
+    cleanup = discord.app_commands.Group(
         name="cleanup",
-        description="Delete all bot-owned channels that have no active watches.",
+        description="Cleanup bot-owned channels.",
     )
-    async def admin_cleanup(self, interaction: discord.Interaction) -> None:
+
+    @cleanup.command(name="now", description="Delete all bot-owned channels that have no active watches.")
+    async def admin_cleanup_now(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         if guild is None and interaction.guild_id is not None:
             guild = self.snoop.bot.get_guild(interaction.guild_id)
@@ -255,55 +263,26 @@ class Commands(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        bot_owned = self.snoop.searches.get_bot_owned_channels()
-        with_watches = self.snoop.searches.get_channels_with_active_watches()
-        to_delete = bot_owned - with_watches
-
-        deleted_channels = 0
-        deleted_categories = 0
-        errors: list[str] = []
-
-        for channel_id in to_delete:
-            channel = guild.get_channel(channel_id)
-            if channel is None:
-                self.snoop.searches.remove_bot_owned_channel(channel_id)
-                continue
-            if not isinstance(channel, discord.TextChannel):
-                continue
-            try:
-                await channel.delete()
-                self.snoop.searches.remove_bot_owned_channel(channel_id)
-                deleted_channels += 1
-            except discord.Forbidden:
-                errors.append(f"Cannot delete <#{channel_id}>: missing permissions")
-            except discord.HTTPException as e:
-                errors.append(f"Cannot delete <#{channel_id}>: {e}")
-
-        bot_owned_cats = self.snoop.searches.get_bot_owned_categories()
-        for category_id in bot_owned_cats:
-            category = guild.get_channel(category_id)
-            if category is None:
-                self.snoop.searches.remove_bot_owned_category(category_id)
-                continue
-            if not isinstance(category, discord.CategoryChannel):
-                continue
-            if len(category.channels) == 0:
-                try:
-                    await category.delete()
-                    self.snoop.searches.remove_bot_owned_category(category_id)
-                    deleted_categories += 1
-                except discord.Forbidden:
-                    errors.append(f"Cannot delete category {category.name}: missing permissions")
-                except discord.HTTPException as e:
-                    errors.append(f"Cannot delete category {category.name}: {e}")
-
+        deleted_channels, deleted_categories, errors = await self.snoop.run_cleanup_async(guild)
         parts = [f"Deleted {deleted_channels} channel(s) and {deleted_categories} empty category(ies)."]
         if errors:
             parts.append("\nErrors: " + "; ".join(errors[:5]))
             if len(errors) > 5:
                 parts.append(f" ... and {len(errors) - 5} more")
         await interaction.followup.send("\n".join(parts), ephemeral=True)
+
+    @cleanup.command(name="auto", description="Enable or disable auto-cleanup when all watches are removed from a channel.")
+    async def admin_cleanup_auto(
+        self,
+        interaction: discord.Interaction,
+        mode: Literal["on", "off"],
+    ) -> None:
+        enabled = mode == "on"
+        self.snoop.searches.set_cleanup_auto(enabled)
+        status = "enabled" if enabled else "disabled"
+        await interaction.response.send_message(f"Auto-cleanup {status}.")
+
+    admin.add_command(cleanup)
 
     @admin.command(name="set_owned", description="Mark a channel or category as bot-owned for cleanup tracking.")
     async def admin_set_owned(

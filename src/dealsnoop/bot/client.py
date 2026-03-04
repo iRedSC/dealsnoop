@@ -393,6 +393,12 @@ class Client(commands.Bot):
                 f"Removed watch {search_id}.",
                 ephemeral=True,
             )
+            if self._searches.get_cleanup_auto():
+                snoop = getattr(self, "_snoop", None)
+                if snoop and interaction.guild_id:
+                    guild = interaction.guild or self.get_guild(interaction.guild_id)
+                    if guild:
+                        await snoop.run_cleanup_async(guild)
 
         @self.tree.context_menu(name="Update watch")
         async def update_watch(

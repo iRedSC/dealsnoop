@@ -406,6 +406,29 @@ class SearchStore:
                 )
             conn.commit()
 
+    def get_cleanup_auto(self) -> bool:
+        """Return whether auto-cleanup is enabled (delete bot-owned channels when watches removed)."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT value FROM bot_config WHERE key = %s",
+                ("cleanup_auto",),
+            )
+            row = cur.fetchone()
+        return row is not None and str(row.get("value", "")).lower() == "true"
+
+    def set_cleanup_auto(self, enabled: bool) -> None:
+        """Enable or disable auto-cleanup."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO bot_config (key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                ("cleanup_auto", "true" if enabled else "false"),
+            )
+            conn.commit()
+
     def record_bot_owned_channel(self, channel_id: int) -> None:
         """Record a channel as bot-owned (created by the bot)."""
         with self._get_conn() as conn:
