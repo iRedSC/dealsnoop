@@ -343,7 +343,10 @@ class Commands(commands.Cog):
         self.snoop.trigger_search_and_reset_timer()
         await interaction.response.send_message("Search started.")
 
-    searchfeed = admin.group(name="searchfeed", description="Configure the listing feed channel.")
+    searchfeed = discord.app_commands.Group(
+        name="searchfeed",
+        description="Configure the listing feed channel.",
+    )
 
     @searchfeed.command(name="setchannel", description="Set or clear the channel where listing feed (kept/skipped) is posted.")
     async def admin_searchfeed_setchannel(
@@ -361,6 +364,8 @@ class Commands(commands.Cog):
             await interaction.response.send_message(f"Feed channel set to <#{channel_id}>.")
         except ValueError as e:
             await interaction.response.send_message(f"ERROR: {e}")
+
+    admin.add_command(searchfeed)
 
     location = discord.app_commands.Group(name="location", description="Manage your default Marketplace location.")
 
