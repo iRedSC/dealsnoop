@@ -512,7 +512,8 @@ class Client(commands.Bot):
             listing_id = custom_id[len(THUMBSDOWN_PREFIX) :]
             await self._handle_thumbsdown(interaction, listing_id)
             return
-        await self.tree.on_interaction(interaction)
+        # App commands (slash, context menus) are already processed by the tree
+        # in parse_interaction_create before this event is dispatched.
 
     async def _handle_listing_desc_toggle(
         self, interaction: discord.Interaction, custom_id: str
