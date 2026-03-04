@@ -7,6 +7,7 @@ Use to debug element extraction issues (e.g. car listings putting location in ti
 
 Usage:
   python scripts/debug_listings.py fetch <query> [--output-dir DIR] [--city CODE] [--limit N]
+  python scripts/debug_listings.py location [--city CODE] [--output-dir DIR]
   python scripts/debug_listings.py search <pattern> [--in FILE]
   python scripts/debug_listings.py compare <dir1> <dir2>
 """
@@ -141,6 +142,78 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         browser.quit()
 
 
+def cmd_location(args: argparse.Namespace) -> int:
+    """Debug location extraction from Marketplace page."""
+    city_code = args.city
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    url = (
+        f"https://www.facebook.com/marketplace/{city_code}/search"
+        "?query=a&sortBy=creation_time_descend&daysSinceListed=7&exact=false&radius_in_km=50"
+    )
+    print(f"Loading: {url}")
+    browser = get_browser()
+    try:
+        browser.get(url)
+        time.sleep(3)
+        html = browser.page_source
+        full_html_path = output_dir / "location_debug_page.html"
+        full_html_path.write_text(html, encoding="utf-8")
+        print(f"Saved HTML to {full_html_path}")
+
+        soup = BeautifulSoup(html, "html.parser")
+        city_state_pattern = re.compile(
+            r"^[A-Za-z][A-Za-z .'-]+,\s*[A-Za-z][A-Za-z .'-]+$"
+        )
+        within_variants = re.compile(
+            r"Within|miles of|km of|radius|rayon|dans un rayon",
+            re.IGNORECASE,
+        )
+
+        spans = soup.find_all("span", attrs={"dir": "auto"})
+        print(f"\nspan[dir=auto] count: {len(spans)}")
+
+        city_state_matches = [
+            s.get_text(" ", strip=True) for s in spans
+            if city_state_pattern.match(s.get_text(" ", strip=True))
+        ]
+        print(f"city_state_pattern matches ({len(city_state_matches)}): {city_state_matches[:10]}")
+
+        within_samples = []
+        for s in spans:
+            parent_text = s.parent.get_text(" ", strip=True) if s.parent else ""
+            if within_variants.search(parent_text):
+                within_samples.append(
+                    (s.get_text(" ", strip=True), parent_text[:80])
+                )
+        print(f"spans with 'Within'/radius in parent ({len(within_samples)}):")
+        for text, parent in within_samples[:5]:
+            print(f"  text={text!r} parent_preview={parent!r}...")
+
+        extracted = None
+        for s in spans:
+            text = s.get_text(" ", strip=True)
+            if not city_state_pattern.match(text):
+                continue
+            parent_text = s.parent.get_text(" ", strip=True) if s.parent else ""
+            if within_variants.search(parent_text):
+                extracted = text
+                break
+        if not extracted:
+            for s in spans:
+                text = s.get_text(" ", strip=True)
+                if city_state_pattern.match(text):
+                    extracted = text
+                    break
+
+        print(f"\nExtraction result: {extracted!r}" if extracted else "\nExtraction result: FAILED")
+        print(f"page_has_marketplace: {'marketplace' in soup.get_text().lower()}")
+        return 0
+    finally:
+        browser.quit()
+
+
 def cmd_search(args: argparse.Namespace) -> int:
     """Search for pattern in dumped JSON or HTML files."""
     pattern = re.compile(args.pattern, re.IGNORECASE)
@@ -244,6 +317,24 @@ def main() -> int:
     )
     p_fetch.add_argument("--limit", "-n", type=int, default=10, help="Max listings to extract")
     p_fetch.set_defaults(func=cmd_fetch)
+
+    # location
+    p_location = subparsers.add_parser(
+        "location", help="Debug location extraction from Marketplace page"
+    )
+    p_location.add_argument(
+        "--city",
+        "-c",
+        default="107976589222439",
+        help="City code (default: 107976589222439)",
+    )
+    p_location.add_argument(
+        "--output-dir",
+        "-o",
+        default="debug_output",
+        help="Output directory for saved HTML",
+    )
+    p_location.set_defaults(func=cmd_location)
 
     # search
     p_search = subparsers.add_parser("search", help="Search for pattern in dump files")

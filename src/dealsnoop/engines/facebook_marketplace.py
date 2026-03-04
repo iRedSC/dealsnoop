@@ -2,8 +2,11 @@
 
 import asyncio
 from dataclasses import replace
+import os
 import random
 import re
+from datetime import datetime
+from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag  # type: ignore[import-untyped]
 from discord.ext import tasks  # type: ignore[import-untyped]
@@ -74,28 +77,73 @@ class FacebookEngine:
 
         return (date, description)
 
-    def _extract_page_location(self, soup: BeautifulSoup, city_code: str = "") -> str:
+    def _extract_page_location(
+        self,
+        soup: BeautifulSoup,
+        city_code: str = "",
+        fallback: str | None = None,
+        page_html: str | None = None,
+    ) -> str:
         """Extract the marketplace search origin location from the loaded page."""
-        strict_classes = (
-            "x193iq5w xeuugli x13faqbe x1vvkbs x1xmvt09 x1lliihq x1s928wv "
-            "xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x xudqn12 x3x7a5m x6prxxf "
-            "xvq8zen x1s688f x1fey0fg"
-        )
         city_state_pattern = re.compile(r"^[A-Za-z][A-Za-z .'-]+,\s*[A-Za-z][A-Za-z .'-]+$")
-
-        for span in soup.find_all("span", class_=strict_classes, attrs={"dir": "auto"}):
-            text = span.get_text(" ", strip=True)
-            if city_state_pattern.match(text):
-                return text
+        within_variants = re.compile(
+            r"Within|miles of|km of|radius|rayon|dans un rayon",
+            re.IGNORECASE,
+        )
 
         for span in soup.find_all("span", attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
             if not city_state_pattern.match(text):
                 continue
             parent_text = span.parent.get_text(" ", strip=True) if span.parent else ""
-            if "Within" in parent_text:
+            if within_variants.search(parent_text):
                 return text
 
+        for span in soup.find_all("span", attrs={"dir": "auto"}):
+            text = span.get_text(" ", strip=True)
+            if city_state_pattern.match(text):
+                return text
+
+        if fallback and city_state_pattern.match(fallback.strip()):
+            logger.warning(
+                "Location extraction failed; using cached/fallback location %r for city code %s",
+                fallback,
+                city_code or "(unknown)",
+            )
+            return fallback.strip()
+
+        spans = soup.find_all("span", attrs={"dir": "auto"})
+        matches = [
+            s.get_text(" ", strip=True)
+            for s in spans
+            if city_state_pattern.match(s.get_text(" ", strip=True))
+        ]
+        with_within = [
+            (
+                s.get_text(" ", strip=True),
+                (s.parent.get_text(" ", strip=True) if s.parent else "")[:100],
+            )
+            for s in spans
+            if within_variants.search(
+                s.parent.get_text(" ", strip=True) if s.parent else ""
+            )
+        ][:5]
+        logger.warning(
+            "Location extraction failed for city code %s: span[dir=auto] count=%d, "
+            "city_state matches=%s, within_parent_samples=%s, page_has_marketplace=%s",
+            city_code or "(unknown)",
+            len(spans),
+            matches[:5] if matches else [],
+            with_within,
+            "marketplace" in (soup.get_text() if soup else "").lower(),
+        )
+        if os.environ.get("DEALSNOOP_DEBUG_SAVE_HTML_ON_LOCATION_FAIL") and page_html:
+            out_dir = Path("debug_output")
+            out_dir.mkdir(exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_path = out_dir / f"location_fail_{city_code or 'unknown'}_{stamp}.html"
+            out_path.write_text(page_html, encoding="utf-8")
+            logger.info("Saved page HTML to %s for debugging", out_path)
         raise LocationResolutionError(
             f"Could not resolve location from Marketplace page for city code {city_code or '(unknown)'}"
         )
@@ -110,7 +158,12 @@ class FacebookEngine:
             html = await asyncio.to_thread(lambda: self.browser.page_source)
             soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
             if origin is None:
-                origin = self._extract_page_location(soup, search.city_code)
+                fallback = search.location_name or self.snoop.searches.get_location_name(
+                    search.city_code
+                )
+                origin = self._extract_page_location(
+                    soup, search.city_code, fallback=fallback, page_html=html
+                )
             listings += soup.find_all('a')
             await asyncio.sleep(1)
         if origin is None:
@@ -129,7 +182,10 @@ class FacebookEngine:
         await asyncio.sleep(3)  # Allow JS to render before reading page source.
         html = await asyncio.to_thread(lambda: self.browser.page_source)
         soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
-        return self._extract_page_location(soup, city_code)
+        fallback = self.snoop.searches.get_location_name(city_code)
+        return self._extract_page_location(
+            soup, city_code, fallback=fallback, page_html=html
+        )
     
 
     def _title_from_link(self, link: Tag) -> str:
