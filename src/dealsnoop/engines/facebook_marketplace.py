@@ -77,6 +77,13 @@ class FacebookEngine:
 
         return (date, description)
 
+    def _is_plausible_location(self, text: str) -> bool:
+        """Reject product titles etc. Real locations have short city part (e.g. City, ST)."""
+        if "," not in text:
+            return False
+        city_part = text.split(",", 1)[0].strip()
+        return len(city_part) <= 45 and len(city_part.split()) <= 6
+
     def _extract_page_location(
         self,
         soup: BeautifulSoup,
@@ -93,18 +100,32 @@ class FacebookEngine:
 
         for span in soup.find_all("span", attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
-            if not city_state_pattern.match(text):
+            if not city_state_pattern.match(text) or not self._is_plausible_location(text):
                 continue
             parent_text = span.parent.get_text(" ", strip=True) if span.parent else ""
             if within_variants.search(parent_text):
+                logger.info(
+                    "Resolved location %r for city code %s (from span with Within/radius in parent)",
+                    text,
+                    city_code or "(unknown)",
+                )
                 return text
 
         for span in soup.find_all("span", attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
-            if city_state_pattern.match(text):
+            if city_state_pattern.match(text) and self._is_plausible_location(text):
+                logger.info(
+                    "Resolved location %r for city code %s (from span with city_state match, no Within in parent)",
+                    text,
+                    city_code or "(unknown)",
+                )
                 return text
 
-        if fallback and city_state_pattern.match(fallback.strip()):
+        if (
+            fallback
+            and city_state_pattern.match(fallback.strip())
+            and self._is_plausible_location(fallback.strip())
+        ):
             logger.warning(
                 "Location extraction failed; using cached/fallback location %r for city code %s",
                 fallback,
