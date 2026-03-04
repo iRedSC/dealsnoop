@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -30,16 +31,22 @@ GUILD = discord.Object(GUILD_ID)
 
 async def _get_thumbsdown_suggestion(
     listing: dict, config: SearchConfig
-) -> str:
-    """Call AI to suggest a 1-2 sentence context addition based on disliked listing."""
+) -> tuple[str, str]:
+    """Call AI to suggest two different 1-2 sentence context additions based on disliked listing."""
     terms = config.terms
     target_price = config.target_price or "(no max price)"
     context = config.context or "(none)"
-    prompt = f"""The user thumbs-downed this Facebook Marketplace listing. Given the listing and the watch criteria (terms, target price, context), infer why they likely disliked it. Suggest a 1-2 sentence addition to the watch's context field that would help the AI filter avoid similar listings in the future. Respond with ONLY the suggested context addition, no other text.
+    prompt = f"""The user thumbs-downed this Facebook Marketplace listing. Given the listing and the watch criteria (terms, target price, context), infer why they likely disliked it. Suggest TWO different possible 1-2 sentence additions to the watch's context field that would help the AI filter avoid similar listings in the future. The two options should offer different angles or emphases.
+
+Is the listing WAY too expensive? (If price is close to the target, that's likely not the issue). Is it a variant not specified in the terms or context?
+
+Respond with ONLY these two options in this exact format:
+Option 1: [your first suggestion]
+Option 2: [your second suggestion]
 
 Watch criteria:
 - Terms: {terms}
-- Target price: ${target_price}
+- Comfortable price: ${target_price}
 - Current context: {context}
 
 Listing:
@@ -57,7 +64,27 @@ Listing:
         model="gpt-4o-mini",
         input=prompt,
     )
-    return (response.output_text or "").strip()
+    text = (response.output_text or "").strip()
+
+    # Parse "Option 1: ..." and "Option 2: ..."
+    opt1_match = re.search(r"Option\s*1\s*:\s*(.+?)(?=Option\s*2\s*:|$)", text, re.DOTALL | re.IGNORECASE)
+    opt2_match = re.search(r"Option\s*2\s*:\s*(.+?)$", text, re.DOTALL | re.IGNORECASE)
+
+    opt1 = opt1_match.group(1).strip() if opt1_match else ""
+    opt2 = opt2_match.group(1).strip() if opt2_match else ""
+
+    # Fallback: split by "Option 2" or numbered list
+    if not opt1 or not opt2:
+        parts = re.split(r"\n\s*Option\s*2\s*:\s*", text, flags=re.IGNORECASE, maxsplit=1)
+        if len(parts) >= 2:
+            opt1 = re.sub(r"^Option\s*1\s*:\s*", "", parts[0], flags=re.IGNORECASE).strip()
+            opt2 = parts[1].strip()
+        elif "\n" in text:
+            lines = [l.strip() for l in text.split("\n") if l.strip()]
+            opt1 = lines[0] if len(lines) > 0 else text
+            opt2 = lines[1] if len(lines) > 1 else ""
+
+    return (opt1 or text, opt2 or text)
 
 
 def _parse_city_code(value: str) -> str:
@@ -222,13 +249,14 @@ class UpdateContextModal(discord.ui.Modal, title="Update context"):
         )
 
 
-THUMBSDOWN_APPROVE_PREFIX = "thumbsdown_approve:"
+THUMBSDOWN_OPTION1_PREFIX = "thumbsdown_1:"
+THUMBSDOWN_OPTION2_PREFIX = "thumbsdown_2:"
 THUMBSDOWN_CANCEL_PREFIX = "thumbsdown_cancel:"
 THUMBSDOWN_EDIT_PREFIX = "thumbsdown_edit:"
 
 
 class ThumbsDownFeedbackView(discord.ui.View):
-    """View with Approve, Cancel, Edit buttons for thumbs-down AI suggestion."""
+    """View with 1, 2, Cancel, Edit buttons for thumbs-down AI suggestion."""
 
     def __init__(
         self,
@@ -241,9 +269,16 @@ class ThumbsDownFeedbackView(discord.ui.View):
 
         self.add_item(
             discord.ui.Button(
-                label="Approve",
+                label="1",
                 style=discord.ButtonStyle.success,
-                custom_id=f"{THUMBSDOWN_APPROVE_PREFIX}{pending_id}",
+                custom_id=f"{THUMBSDOWN_OPTION1_PREFIX}{pending_id}",
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="2",
+                style=discord.ButtonStyle.success,
+                custom_id=f"{THUMBSDOWN_OPTION2_PREFIX}{pending_id}",
             )
         )
         self.add_item(
@@ -506,9 +541,14 @@ class Client(commands.Bot):
             listing_id = custom_id[len(THUMBSDOWN_PREFIX) :]
             await self._handle_thumbsdown(interaction, listing_id)
             return
-        if custom_id.startswith(THUMBSDOWN_APPROVE_PREFIX):
+        if custom_id.startswith(THUMBSDOWN_OPTION1_PREFIX):
             await self._handle_thumbsdown_feedback(
-                interaction, custom_id[len(THUMBSDOWN_APPROVE_PREFIX) :], "approve"
+                interaction, custom_id[len(THUMBSDOWN_OPTION1_PREFIX) :], "1"
+            )
+            return
+        if custom_id.startswith(THUMBSDOWN_OPTION2_PREFIX):
+            await self._handle_thumbsdown_feedback(
+                interaction, custom_id[len(THUMBSDOWN_OPTION2_PREFIX) :], "2"
             )
             return
         if custom_id.startswith(THUMBSDOWN_CANCEL_PREFIX):
@@ -600,7 +640,7 @@ class Client(commands.Bot):
             return
 
         try:
-            suggested = await _get_thumbsdown_suggestion(
+            suggested_1, suggested_2 = await _get_thumbsdown_suggestion(
                 listing, config
             )
         except Exception as e:
@@ -611,7 +651,7 @@ class Client(commands.Bot):
             )
             return
 
-        if not (suggested or "").strip():
+        if not (suggested_1 or "").strip() and not (suggested_2 or "").strip():
             await interaction.followup.send(
                 "Could not generate suggestion. Try updating context manually.",
                 ephemeral=True,
@@ -620,12 +660,18 @@ class Client(commands.Bot):
 
         pending_id = uuid.uuid4().hex[:12]
         self._thumbsdown_pending[pending_id] = {
-            "suggested_context": suggested.strip(),
+            "suggested_context_1": (suggested_1 or "").strip(),
+            "suggested_context_2": (suggested_2 or "").strip(),
             "search_id": config.id,
             "listing_id": listing_id,
         }
 
-        content = f"**Suggested context addition:**\n\n{suggested.strip()}"
+        content_parts = []
+        if suggested_1:
+            content_parts.append(f"**Option 1:**\n{suggested_1.strip()}")
+        if suggested_2:
+            content_parts.append(f"**Option 2:**\n{suggested_2.strip()}")
+        content = "\n\n".join(content_parts)
         view = ThumbsDownFeedbackView(pending_id, self._searches)
         await interaction.followup.send(
             content,
@@ -658,12 +704,19 @@ class Client(commands.Bot):
             )
             return
 
-        if action == "approve":
+        if action == "1":
+            suggested = pending.get("suggested_context_1", "")
+        elif action == "2":
+            suggested = pending.get("suggested_context_2", "")
+        else:
+            suggested = None
+
+        if suggested is not None:
             existing = config.context or ""
             new_context = (
-                f"{existing}\n\n{pending['suggested_context']}"
+                f"{existing}\n\n{suggested}"
                 if existing
-                else pending["suggested_context"]
+                else suggested
             )
             updated = SearchConfig(
                 id=config.id,
@@ -687,7 +740,14 @@ class Client(commands.Bot):
                 view=None,
             )
         else:  # edit
-            initial = (config.context or "") + "\n\n" + pending["suggested_context"]
+            opt1 = pending.get("suggested_context_1", "")
+            opt2 = pending.get("suggested_context_2", "")
+            parts = [config.context or ""]
+            if opt1:
+                parts.append(f"Option 1: {opt1}")
+            if opt2:
+                parts.append(f"Option 2: {opt2}")
+            initial = "\n\n".join(p for p in parts if p)
             modal = UpdateContextModal(
                 self._searches, config, initial_context=initial
             )
