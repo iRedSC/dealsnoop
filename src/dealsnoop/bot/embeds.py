@@ -75,12 +75,13 @@ def _product_content(
 ) -> tuple[str, str]:
     """Build markdown content for product display. Returns (main_content, footer_content)."""
     desc = description if description is not None else product.description
-    main = f"[{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}"
-    footer = f"{product.date}"
+    main = f"**__[{product.title}]({product.url})__**\n\n**${product.price}**\n\n{desc}"
+    parts = [product.date]
     if product.location:
-        footer += f"\n\n{product.location}"
+        parts.append(product.location)
     if distance is not None and duration:
-        footer += f" — {round(distance)} mi ({duration})"
+        parts.append(f"{round(distance)} mi ({duration})")
+    footer = f"-# {' · '.join(parts)}"
     return (main, footer)
 
 
