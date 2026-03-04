@@ -331,6 +331,14 @@ class Commands(commands.Cog):
         except ValueError as e:
             await interaction.response.send_message(f"ERROR: {e}", ephemeral=True)
 
+    @admin.command(
+        name="clearlocationcache",
+        description="Clear the cached location names so they will be re-resolved from Marketplace.",
+    )
+    async def admin_clearlocationcache(self, interaction: discord.Interaction) -> None:
+        count = self.snoop.searches.clear_location_cache()
+        await interaction.response.send_message(f"Cleared {count} cached location name(s).")
+
     @admin.command(name="clearcache", description="Clear the listing cache so previously seen listings can be notified again.")
     async def admin_clearcache(self, interaction: discord.Interaction) -> None:
         cleared = 0

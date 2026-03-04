@@ -542,3 +542,10 @@ class SearchStore:
                 (city_code, location_name),
             )
             conn.commit()
+
+    def clear_location_cache(self) -> int:
+        """Clear all cached location names. Returns number of rows deleted."""
+        with self._get_conn() as conn:
+            cur = conn.execute("DELETE FROM location_cache")
+            conn.commit()
+        return cur.rowcount
