@@ -121,28 +121,35 @@ class UpdateWatchModal(discord.ui.Modal, title="Update watch"):
         target_price = self.target_price_input.value.strip() or None
         context = self.context_input.value.strip() or None
 
-        location_name = self._config.location_name
-        if self._snoop is not None:
-            location_name = await self._snoop.get_location_for_city_code(city_code)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            location_name = self._config.location_name
+            if self._snoop is not None:
+                location_name = await self._snoop.get_location_for_city_code(city_code)
 
-        updated = SearchConfig(
-            id=self._config.id,
-            terms=terms,
-            channel=self._config.channel,
-            city_code=city_code,
-            location_name=location_name,
-            target_price=target_price,
-            days_listed=self._config.days_listed,
-            radius=radius,
-            context=context,
-        )
-        await asyncio.to_thread(self._searches.add_object, updated)
-        embed = search_config_embed(updated)
-        await interaction.response.send_message(
-            "Watch updated.",
-            embed=embed,
-            ephemeral=True,
-        )
+            updated = SearchConfig(
+                id=self._config.id,
+                terms=terms,
+                channel=self._config.channel,
+                city_code=city_code,
+                location_name=location_name,
+                target_price=target_price,
+                days_listed=self._config.days_listed,
+                radius=radius,
+                context=context,
+            )
+            await asyncio.to_thread(self._searches.add_object, updated)
+            embed = search_config_embed(updated)
+            await interaction.followup.send(
+                "Watch updated.",
+                embed=embed,
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                f"ERROR: {e}",
+                ephemeral=True,
+            )
 
 
 class UpdateContextModal(discord.ui.Modal, title="Update context"):

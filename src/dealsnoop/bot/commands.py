@@ -117,6 +117,8 @@ class Commands(commands.Cog):
         interaction: discord.Interaction,
         search_id: str,
         city_code: str,
+        *,
+        location_name: str | None = None,
     ) -> tuple[int, str]:
         """Create a text channel for a watch under location category."""
         guild = interaction.guild
@@ -125,7 +127,8 @@ class Commands(commands.Cog):
         if guild is None:
             raise ValueError("Cannot create channel outside a server.")
 
-        location_name = await self.snoop.get_location_for_city_code(city_code)
+        if location_name is None:
+            location_name = await self.snoop.get_location_for_city_code(city_code)
         category = await self._get_or_create_location_category(guild, location_name)
         channel_name = _slugify_discord_name(search_id, "watch")
         existing = discord.utils.get(category.text_channels, name=channel_name)
@@ -156,16 +159,25 @@ class Commands(commands.Cog):
             resolved_city_code = _parse_city_code(city_code) if city_code else (
                 user_loc.city_code if user_loc else "107976589222439"
             )
-            resolved_location_name = self.snoop.searches.get_location_name(resolved_city_code)
-
             if channel_id:
                 channel = _parse_channel_id(channel_id)
             else:
-                await interaction.response.defer()
+                channel = None
+
+            await interaction.response.defer()
+
+            resolved_location_name = self.snoop.searches.get_location_name(resolved_city_code)
+            if resolved_location_name is None:
+                resolved_location_name = await self.snoop.get_location_for_city_code(resolved_city_code)
+
+            if channel is not None:
+                pass
+            else:
                 channel, resolved_location_name = await self._create_watch_channel(
                     interaction,
                     search_id=search_id,
                     city_code=resolved_city_code,
+                    location_name=resolved_location_name,
                 )
             config = SearchConfig(
                 search_id,
@@ -191,6 +203,8 @@ class Commands(commands.Cog):
             )
         except discord.HTTPException as e:
             await self._respond(interaction, content=f"ERROR: Failed to create channel/category: {e}")
+        except Exception as e:
+            await self._respond(interaction, content=f"ERROR: {e}")
 
     @discord.app_commands.command(name="list", description="List searches currently being watched.")
     async def list_searches(self, interaction: discord.Interaction) -> None:
@@ -367,12 +381,19 @@ class Commands(commands.Cog):
     async def location_set(self, interaction: discord.Interaction, city_code: str) -> None:
         try:
             parsed_city_code = _parse_city_code(city_code)
-            self.snoop.searches.set_user_location(interaction.user.id, parsed_city_code)
-            await interaction.response.send_message(
-                f"Default Marketplace location set to `{parsed_city_code}`."
-            )
         except ValueError as e:
             await interaction.response.send_message(f"ERROR: {e}")
+            return
+
+        await interaction.response.defer()
+        try:
+            location_name = await self.snoop.get_location_for_city_code(parsed_city_code)
+            self.snoop.searches.set_user_location(interaction.user.id, parsed_city_code)
+            await interaction.followup.send(
+                f"Default Marketplace location set to **{location_name}** (`{parsed_city_code}`)."
+            )
+        except Exception as e:
+            await interaction.followup.send(f"ERROR: {e}")
 
     @location.command(name="remove", description="Remove your default Marketplace location code.")
     async def location_remove(self, interaction: discord.Interaction) -> None:

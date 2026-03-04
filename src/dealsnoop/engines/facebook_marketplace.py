@@ -12,6 +12,7 @@ from selenium.webdriver.common.by import By  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import product_embed
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
+from dealsnoop.exceptions import LocationResolutionError
 from dealsnoop.search_config import build_watch_command
 from dealsnoop.listing_log import SearchLogCollector
 from dealsnoop.logger import logger
@@ -73,7 +74,7 @@ class FacebookEngine:
 
         return (date, description)
 
-    def _extract_page_location(self, soup: BeautifulSoup) -> str:
+    def _extract_page_location(self, soup: BeautifulSoup, city_code: str = "") -> str:
         """Extract the marketplace search origin location from the loaded page."""
         strict_selector = (
             "span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv"
@@ -95,21 +96,27 @@ class FacebookEngine:
             if "Within" in parent_text:
                 return text
 
-        return "Harrisburg, PA"
+        raise LocationResolutionError(
+            f"Could not resolve location from Marketplace page for city code {city_code or '(unknown)'}"
+        )
 
     async def gather_listings(self, search: SearchConfig, sort: str) -> tuple[list[Tag], str]:
         listings = []
-        origin = "Harrisburg, PA"
+        origin: str | None = None
         for term in search.terms:
             url = f'https://www.facebook.com/marketplace/{search.city_code}/search?query={term}&sortBy={sort}&daysSinceListed={search.days_listed}&exact=false&radius_in_km={search.radius}'
             await asyncio.to_thread(self.browser.get, url)
             await asyncio.sleep(3)  # Allow JS to render (marketplace listings load dynamically)
             html = await asyncio.to_thread(lambda: self.browser.page_source)
             soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
-            if origin == "Harrisburg, PA":
-                origin = self._extract_page_location(soup)
+            if origin is None:
+                origin = self._extract_page_location(soup, search.city_code)
             listings += soup.find_all('a')
             await asyncio.sleep(1)
+        if origin is None:
+            raise LocationResolutionError(
+                f"Could not resolve location from Marketplace page for city code {search.city_code}"
+            )
         return (listings, origin)
 
     async def get_location_for_city_code(self, city_code: str) -> str:
@@ -122,7 +129,7 @@ class FacebookEngine:
         await asyncio.sleep(3)  # Allow JS to render before reading page source.
         html = await asyncio.to_thread(lambda: self.browser.page_source)
         soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
-        return self._extract_page_location(soup)
+        return self._extract_page_location(soup, city_code)
     
 
     def _title_from_link(self, link: Tag) -> str:

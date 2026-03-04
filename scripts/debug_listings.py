@@ -240,7 +240,7 @@ def main() -> int:
         "--city",
         "-c",
         default="107976589222439",
-        help="City code (default: Harrisburg, PA)",
+        help="City code (default: 107976589222439)",
     )
     p_fetch.add_argument("--limit", "-n", type=int, default=10, help="Max listings to extract")
     p_fetch.set_defaults(func=cmd_fetch)
