@@ -84,7 +84,58 @@ class FacebookEngine:
         city_part = text.split(",", 1)[0].strip()
         return len(city_part) <= 45 and len(city_part.split()) <= 6
 
-    def _extract_page_location(
+    def _collect_location_candidate_strings(self, soup: BeautifulSoup) -> list[str]:
+        """Find spans matching <text><span>...<span>·</span></span> <text> (location + Within N mi)."""
+        within_variants = re.compile(
+            r"Within|miles of|km of|radius|rayon|dans un rayon|\d+\s*mi\b|\d+\s*km\b",
+            re.IGNORECASE,
+        )
+        candidates: list[str] = []
+        for span in soup.find_all("span", attrs={"dir": "auto"}):
+            full_text = span.get_text(" ", strip=True)
+            if not within_variants.search(full_text):
+                continue
+            candidates.append(full_text)
+        return candidates
+
+    async def _parse_location_with_ai(self, candidate_strings: list[str]) -> str | None:
+        """Use AI to extract only the location from candidate strings. No reasoning model."""
+        if not candidate_strings:
+            return None
+        prompt = """Extract and return ONLY the geographic location (city, state/country) from each text.
+Ignore "Within X mi" / "Within X km" / distance phrases. Return just "City, State" or "City, Country".
+
+Examples:
+Input: "Carlisle, Pennsylvania · Within 40 mi"
+Output: Carlisle, Pennsylvania
+
+Input: "Harrisburg, PA    Within 25 mi"
+Output: Harrisburg, PA
+
+Input: "Tokyo, Japan Within 50 km"
+Output: Tokyo, Japan
+
+Input: "New York, New York · Within 30 mi"
+Output: New York, New York
+
+Now extract the location from this text (return only the location, nothing else):
+
+"""
+        for s in candidate_strings[:5]:
+            response = await asyncio.to_thread(
+                self.chatgpt.chat.completions.create,
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": prompt + s},
+                ],
+                max_tokens=50,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            if text and self._is_plausible_location(text):
+                return text
+        return None
+
+    async def _extract_page_location(
         self,
         soup: BeautifulSoup,
         city_code: str = "",
@@ -100,26 +151,31 @@ class FacebookEngine:
 
         for span in soup.find_all("span", attrs={"dir": "auto"}):
             text = span.get_text(" ", strip=True)
-            if not city_state_pattern.match(text) or not self._is_plausible_location(text):
+            if not within_variants.search(text):
                 continue
-            parent_text = span.parent.get_text(" ", strip=True) if span.parent else ""
-            if within_variants.search(parent_text):
+            city_state_part = (
+                re.split(r"\b(?:Within|miles of|km of)\b", text, flags=re.IGNORECASE)[0]
+                .strip()
+                .rstrip("· ")
+            )
+            if city_state_pattern.match(city_state_part) and self._is_plausible_location(city_state_part):
                 logger.info(
-                    "Resolved location %r for city code %s (from span with Within/radius in parent)",
-                    text,
+                    "Resolved location %r for city code %s (parsed from span with Within)",
+                    city_state_part,
                     city_code or "(unknown)",
                 )
-                return text
+                return city_state_part
 
-        for span in soup.find_all("span", attrs={"dir": "auto"}):
-            text = span.get_text(" ", strip=True)
-            if city_state_pattern.match(text) and self._is_plausible_location(text):
+        candidates = self._collect_location_candidate_strings(soup)
+        if candidates:
+            ai_location = await self._parse_location_with_ai(candidates)
+            if ai_location:
                 logger.info(
-                    "Resolved location %r for city code %s (from span with city_state match, no Within in parent)",
-                    text,
+                    "Resolved location %r for city code %s (via AI extraction)",
+                    ai_location,
                     city_code or "(unknown)",
                 )
-                return text
+                return ai_location
 
         if (
             fallback
@@ -182,7 +238,7 @@ class FacebookEngine:
                 fallback = search.location_name or self.snoop.searches.get_location_name(
                     search.city_code
                 )
-                origin = self._extract_page_location(
+                origin = await self._extract_page_location(
                     soup, search.city_code, fallback=fallback, page_html=html
                 )
             listings += soup.find_all('a')
@@ -204,7 +260,7 @@ class FacebookEngine:
         html = await asyncio.to_thread(lambda: self.browser.page_source)
         soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
         fallback = self.snoop.searches.get_location_name(city_code)
-        return self._extract_page_location(
+        return await self._extract_page_location(
             soup, city_code, fallback=fallback, page_html=html
         )
     
