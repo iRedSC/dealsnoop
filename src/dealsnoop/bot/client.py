@@ -123,9 +123,10 @@ class UpdateWatchModal(discord.ui.Modal, title="Update watch"):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            location_name = self._config.location_name
             if self._snoop is not None:
                 location_name = await self._snoop.get_location_for_city_code(city_code)
+            else:
+                location_name = city_code
 
             updated = SearchConfig(
                 id=self._config.id,

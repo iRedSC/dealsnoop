@@ -40,7 +40,8 @@ class Snoop:
     async def get_location_for_city_code(self, city_code: str) -> str:
         """Resolve and cache human-readable location name for a city code."""
         cached = self.searches.get_location_name(city_code)
-        if cached:
+        # Ignore stale "Harrisburg, PA" - was the old fallback when parsing failed
+        if cached and cached != "Harrisburg, PA":
             return cached
 
         for engine in self.engines:

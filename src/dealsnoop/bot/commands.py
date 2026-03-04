@@ -166,9 +166,7 @@ class Commands(commands.Cog):
 
             await interaction.response.defer()
 
-            resolved_location_name = self.snoop.searches.get_location_name(resolved_city_code)
-            if resolved_location_name is None:
-                resolved_location_name = await self.snoop.get_location_for_city_code(resolved_city_code)
+            resolved_location_name = await self.snoop.get_location_for_city_code(resolved_city_code)
 
             if channel is not None:
                 pass
