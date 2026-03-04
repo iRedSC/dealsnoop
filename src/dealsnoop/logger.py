@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections import deque
 
 # ANSI color codes
 COLORS = {
@@ -52,6 +53,39 @@ class ColorFormatter(logging.Formatter):
         return super().format(record)
 
 
+class PlainFormatter(logging.Formatter):
+    """Formatter that strips $X$ markup and ANSI codes for plain-text output."""
+
+    _strip_markup = re.compile(r"\$[A-Z]\$")
+    _strip_ansi = re.compile(r"\033\[[0-9;]*m")
+
+    def format(self, record):
+        msg = self._strip_markup.sub("", str(record.msg))
+        msg = self._strip_ansi.sub("", msg)
+        record.msg = msg
+        return super().format(record)
+
+
+class RingBufferHandler(logging.Handler):
+    """Stores the last N log records as plain text for retrieval."""
+
+    def __init__(self, capacity: int = 50):
+        super().__init__()
+        self._buffer: deque[str] = deque(maxlen=capacity)
+        self.setFormatter(PlainFormatter("%(levelname)-8s - %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._buffer.append(self.format(record))
+        except Exception:
+            self.handleError(record)
+
+    def get_tail(self, lines: int = 50) -> str:
+        """Return the last `lines` log entries as plain text."""
+        entries = list(self._buffer)[-lines:]
+        return "\n".join(entries) if entries else "(no logs yet)"
+
+
 # Setup handler and logger
 handler = logging.StreamHandler()
 handler.setFormatter(
@@ -60,9 +94,13 @@ handler.setFormatter(
     )
 )
 
+ring_buffer = RingBufferHandler(capacity=50)
+ring_buffer.setLevel(logging.DEBUG)
+
 logger = logging.getLogger("discord_bot")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
+logger.addHandler(ring_buffer)
 logger.propagate = False
 
 # Remove default handlers from discord logger and attach our color handler
@@ -71,5 +109,11 @@ for h in discord_logger.handlers[:]:
     discord_logger.removeHandler(h)
 
 discord_logger.addHandler(handler)
+discord_logger.addHandler(ring_buffer)
 discord_logger.setLevel(logging.WARNING)
 discord_logger.propagate = False
+
+
+def get_recent_logs(lines: int = 50) -> str:
+    """Return the last `lines` log entries for display (e.g. via /logs command)."""
+    return ring_buffer.get_tail(lines=lines)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import re
 import unicodedata
 from typing import Literal
@@ -10,6 +11,7 @@ import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import list_searches_embed, search_config_embed
+from dealsnoop.logger import get_recent_logs
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
 
@@ -340,6 +342,20 @@ class Commands(commands.Cog):
             await interaction.response.send_message(f"Cleared cache for {cleared} engine(s).")
         else:
             await interaction.response.send_message("No caches to clear.")
+
+    @admin.command(name="logs", description="Show the last 50 log lines from the bot.")
+    async def admin_logs(self, interaction: discord.Interaction, lines: int = 50) -> None:
+        lines = min(max(1, lines), 50)
+        log_text = get_recent_logs(lines=lines)
+        file = discord.File(
+            io.BytesIO(log_text.encode("utf-8")),
+            filename="logs.txt",
+        )
+        await interaction.response.send_message(
+            f"Last {lines} log line(s):",
+            file=file,
+            ephemeral=True,
+        )
 
     @admin.command(name="forcesearch", description="Start a search now and reset the 5-minute loop timer.")
     async def admin_forcesearch(self, interaction: discord.Interaction) -> None:

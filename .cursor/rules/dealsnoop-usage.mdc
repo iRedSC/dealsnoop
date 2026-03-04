@@ -39,6 +39,7 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 | `/admin cleanup now`                       | Delete all bot-owned channels without active watches (and empty bot-owned categories)   |
 | `/admin cleanup auto <on\|off>`            | Enable or disable auto-cleanup (delete bot-owned channels when all watches are removed) |
 | `/admin clearcache`                        | Clear the listing cache                                                                |
+| `/admin logs [lines]`                      | Show last N log lines (default 50, max 50)                                              |
 | `/admin forcesearch`                       | Start a search now and reset the 5-minute loop timer                                   |
 | `/admin searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear                        |
 
