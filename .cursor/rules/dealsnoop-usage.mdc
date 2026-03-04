@@ -35,7 +35,11 @@ Set `DB_URL` via your deployment UI (e.g. Dokploy). Use the database host from y
 | `/watch`                                   | Add a search: terms, target_price, context, city_code, days_listed, radius, channel_id |
 | `/list`                                    | List all watched searches                                                              |
 | `/unwatch <id>`                            | Remove a search by id                                                                  |
-| `/searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear                               |
+| `/admin set_owned <category\|channel> <id>` | Mark a channel or category as bot-owned for cleanup tracking                          |
+| `/admin cleanup`                           | Delete all bot-owned channels without active watches (and empty bot-owned categories)   |
+| `/admin clearcache`                        | Clear the listing cache                                                                |
+| `/admin forcesearch`                       | Start a search now and reset the 5-minute loop timer                                   |
+| `/admin searchfeed setchannel <channel \| none>` | Set the channel for the listing feed, or `none` to clear                        |
 
 ## Discord Permissions
 

@@ -99,6 +99,18 @@ CREATE TABLE IF NOT EXISTS listing_messages (
 );
 """
 
+BOT_OWNED_CHANNELS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS bot_owned_channels (
+    channel_id BIGINT PRIMARY KEY
+);
+"""
+
+BOT_OWNED_CATEGORIES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS bot_owned_categories (
+    category_id BIGINT PRIMARY KEY
+);
+"""
+
 
 def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
@@ -144,6 +156,8 @@ class SearchStore:
             conn.execute(LISTING_METADATA_TABLE_SQL)
             conn.execute(LISTINGS_TABLE_SQL)
             conn.execute(LISTING_MESSAGES_TABLE_SQL)
+            conn.execute(BOT_OWNED_CHANNELS_TABLE_SQL)
+            conn.execute(BOT_OWNED_CATEGORIES_TABLE_SQL)
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
             conn.commit()
@@ -383,6 +397,57 @@ class SearchStore:
                     ("feed_channel_id", str(channel_id)),
                 )
             conn.commit()
+
+    def record_bot_owned_channel(self, channel_id: int) -> None:
+        """Record a channel as bot-owned (created by the bot)."""
+        with self._get_conn() as conn:
+            conn.execute(
+                "INSERT INTO bot_owned_channels (channel_id) VALUES (%s) ON CONFLICT (channel_id) DO NOTHING",
+                (channel_id,),
+            )
+            conn.commit()
+
+    def record_bot_owned_category(self, category_id: int) -> None:
+        """Record a category as bot-owned (created by the bot)."""
+        with self._get_conn() as conn:
+            conn.execute(
+                "INSERT INTO bot_owned_categories (category_id) VALUES (%s) ON CONFLICT (category_id) DO NOTHING",
+                (category_id,),
+            )
+            conn.commit()
+
+    def get_bot_owned_channels(self) -> set[int]:
+        """Return all channel IDs that the bot created."""
+        with self._get_conn() as conn:
+            cur = conn.execute("SELECT channel_id FROM bot_owned_channels")
+            rows = cur.fetchall()
+        return {row["channel_id"] for row in rows}
+
+    def get_bot_owned_categories(self) -> set[int]:
+        """Return all category IDs that the bot created."""
+        with self._get_conn() as conn:
+            cur = conn.execute("SELECT category_id FROM bot_owned_categories")
+            rows = cur.fetchall()
+        return {row["category_id"] for row in rows}
+
+    def remove_bot_owned_channel(self, channel_id: int) -> None:
+        """Remove a channel from bot-owned tracking (e.g. after deletion)."""
+        with self._get_conn() as conn:
+            conn.execute("DELETE FROM bot_owned_channels WHERE channel_id = %s", (channel_id,))
+            conn.commit()
+
+    def remove_bot_owned_category(self, category_id: int) -> None:
+        """Remove a category from bot-owned tracking (e.g. after deletion)."""
+        with self._get_conn() as conn:
+            conn.execute("DELETE FROM bot_owned_categories WHERE category_id = %s", (category_id,))
+            conn.commit()
+
+    def get_channels_with_active_watches(self) -> set[int]:
+        """Return channel IDs that have at least one active watch (SearchConfig)."""
+        with self._get_conn() as conn:
+            cur = conn.execute("SELECT DISTINCT channel FROM searches")
+            rows = cur.fetchall()
+        return {row["channel"] for row in rows}
 
     def get_user_location(self, user_id: int) -> UserLocation | None:
         """Get marketplace location settings for a user."""
