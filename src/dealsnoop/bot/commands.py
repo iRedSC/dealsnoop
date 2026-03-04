@@ -54,6 +54,13 @@ def _slugify_discord_name(value: str, fallback: str) -> str:
     return text if text else fallback
 
 
+def _is_admin(interaction: discord.Interaction) -> bool:
+    """Return True if the user has administrator permission in the guild."""
+    if interaction.guild is None:
+        return False
+    return interaction.user.guild_permissions.administrator
+
+
 def _get_base_id(search_id: str) -> str:
     """Return base id by stripping a trailing numeric suffix (_N)."""
     parts = search_id.rsplit("_", 1)
@@ -170,6 +177,7 @@ class Commands(commands.Cog):
                 location_name=resolved_location_name,
                 days_listed=days_listed,
                 radius=radius,
+                owner_id=interaction.user.id,
             )
             self.snoop.searches.add_object(config)
             embed = search_config_embed(config)
@@ -187,7 +195,12 @@ class Commands(commands.Cog):
     @discord.app_commands.command(name="list", description="List searches currently being watched.")
     async def list_searches(self, interaction: discord.Interaction) -> None:
         searches = sorted(self.snoop.searches.get_all_objects(), key=lambda s: s.id)
-        await interaction.response.send_message(embed=list_searches_embed(searches))
+        guild: discord.Guild | None = interaction.guild
+        if guild is None and interaction.guild_id is not None:
+            guild = self.snoop.bot.get_guild(interaction.guild_id)
+        await interaction.response.send_message(
+            embed=list_searches_embed(searches, guild=guild),
+        )
 
     async def _unwatch_id_autocomplete(
         self,
@@ -209,12 +222,22 @@ class Commands(commands.Cog):
     async def unwatch(self, interaction: discord.Interaction, id: str) -> None:
         for search in self.snoop.searches.get_all_objects():
             if search.id == id:
+                if not _is_admin(interaction) and search.owner_id != interaction.user.id:
+                    await interaction.response.send_message(
+                        "You can only remove watches you own. Ask an admin to remove this one.",
+                        ephemeral=True,
+                    )
+                    return
                 self.snoop.searches.remove_object(search)
                 await interaction.response.send_message(f"Removed {search.terms} from watchlist")
                 return
         await interaction.response.send_message("ID not found.")
 
-    admin = discord.app_commands.Group(name="admin", description="Admin commands.")
+    admin = discord.app_commands.Group(
+        name="admin",
+        description="Admin commands.",
+        default_permissions=discord.Permissions(administrator=True),
+    )
 
     @admin.command(
         name="cleanup",

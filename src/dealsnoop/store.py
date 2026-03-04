@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS searches (
     target_price VARCHAR(50),
     days_listed INT NOT NULL DEFAULT 1,
     radius INT NOT NULL DEFAULT 30,
-    context TEXT
+    context TEXT,
+    owner_id BIGINT
 );
 """
 
@@ -116,6 +117,9 @@ def _row_to_config(row: dict) -> SearchConfig:
     """Convert a database row to SearchConfig."""
     raw = row["terms"]
     terms = tuple(json.loads(raw) if isinstance(raw, str) else raw)
+    owner_id = row.get("owner_id")
+    if owner_id is not None:
+        owner_id = int(owner_id)
     return SearchConfig(
         id=row["id"],
         terms=terms,
@@ -126,6 +130,7 @@ def _row_to_config(row: dict) -> SearchConfig:
         days_listed=row["days_listed"],
         radius=row["radius"],
         context=row["context"],
+        owner_id=owner_id,
     )
 
 
@@ -160,6 +165,7 @@ class SearchStore:
             conn.execute(BOT_OWNED_CATEGORIES_TABLE_SQL)
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
+            conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS owner_id BIGINT")
             conn.commit()
         logger.info("Database schema initialized.")
 
@@ -170,9 +176,9 @@ class SearchStore:
             conn.execute(
                 """
                 INSERT INTO searches (
-                    id, terms, channel, city_code, location_name, target_price, days_listed, radius, context
+                    id, terms, channel, city_code, location_name, target_price, days_listed, radius, context, owner_id
                 )
-                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     terms = EXCLUDED.terms,
                     channel = EXCLUDED.channel,
@@ -181,7 +187,8 @@ class SearchStore:
                     target_price = EXCLUDED.target_price,
                     days_listed = EXCLUDED.days_listed,
                     radius = EXCLUDED.radius,
-                    context = EXCLUDED.context
+                    context = EXCLUDED.context,
+                    owner_id = COALESCE(EXCLUDED.owner_id, searches.owner_id)
                 """,
                 (
                     obj.id,
@@ -193,6 +200,7 @@ class SearchStore:
                     obj.days_listed,
                     obj.radius,
                     obj.context,
+                    obj.owner_id,
                 ),
             )
             conn.commit()

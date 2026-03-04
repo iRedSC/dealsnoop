@@ -338,6 +338,12 @@ class Client(commands.Bot):
                 ephemeral=True,
             )
 
+        def _can_modify_watch(interaction: discord.Interaction, config) -> bool:
+            """Return True if user is admin or owner of the watch."""
+            if interaction.guild and interaction.user.guild_permissions.administrator:
+                return True
+            return config.owner_id == interaction.user.id if config.owner_id else False
+
         @self.tree.context_menu(name="Remove watch")
         async def remove_watch(
             interaction: discord.Interaction, message: discord.Message
@@ -365,6 +371,12 @@ class Client(commands.Bot):
             if config is None:
                 await interaction.followup.send(
                     "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            if not _can_modify_watch(interaction, config):
+                await interaction.followup.send(
+                    "You can only remove watches you own.",
                     ephemeral=True,
                 )
                 return
@@ -411,6 +423,12 @@ class Client(commands.Bot):
                     ephemeral=True,
                 )
                 return
+            if not _can_modify_watch(interaction, config):
+                await interaction.response.send_message(
+                    "Only admins and the watch owner can update watches.",
+                    ephemeral=True,
+                )
+                return
             snoop = getattr(self, "_snoop", None)
             modal = UpdateWatchModal(self._searches, config, snoop)
             await interaction.response.send_modal(modal)
@@ -441,6 +459,12 @@ class Client(commands.Bot):
             if config is None:
                 await interaction.response.send_message(
                     "Watch already removed.",
+                    ephemeral=True,
+                )
+                return
+            if not _can_modify_watch(interaction, config):
+                await interaction.response.send_message(
+                    "Only admins and the watch owner can update context.",
                     ephemeral=True,
                 )
                 return
@@ -546,6 +570,18 @@ class Client(commands.Bot):
         if not config:
             await interaction.response.send_message(
                 "Listing or watch no longer available.",
+                ephemeral=True,
+            )
+            return
+
+        is_admin = (
+            interaction.guild is not None
+            and interaction.user.guild_permissions.administrator
+        )
+        is_owner = config.owner_id == interaction.user.id if config.owner_id else False
+        if not is_admin and not is_owner:
+            await interaction.response.send_message(
+                "Only admins and the watch owner can use thumbs down.",
                 ephemeral=True,
             )
             return

@@ -137,7 +137,21 @@ def search_config_embed(config: SearchConfig) -> discord.Embed:
     return embed
 
 
-def list_searches_embed(searches: list[SearchConfig]) -> discord.Embed:
+def _format_owner(owner_id: int | None, guild: discord.Guild | None) -> str:
+    """Format owner for display: member name if in guild, else ID or 'Unknown'."""
+    if owner_id is None:
+        return "Unknown"
+    if guild:
+        member = guild.get_member(owner_id)
+        if member:
+            return member.display_name or member.name or str(owner_id)
+    return f"<@{owner_id}>"
+
+
+def list_searches_embed(
+    searches: list[SearchConfig],
+    guild: discord.Guild | None = None,
+) -> discord.Embed:
     """Build embed for `/list` command showing watched searches."""
     embed = discord.Embed(title="Watched Searches", color=ACCENT_PRODUCT)
     if not searches:
@@ -147,10 +161,12 @@ def list_searches_embed(searches: list[SearchConfig]) -> discord.Embed:
     for search in searches[:25]:
         terms = ", ".join(search.terms) if search.terms else "—"
         location = search.location_name or search.city_code or "—"
+        owner_str = _format_owner(search.owner_id, guild)
         value = (
             f"Terms: {terms}\n"
             f"Location: {location}\n"
-            f"Channel: <#{search.channel}>"
+            f"Channel: <#{search.channel}>\n"
+            f"Owner: {owner_str}"
         )
         embed.add_field(name=search.id, value=value, inline=False)
 

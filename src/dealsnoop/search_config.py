@@ -35,3 +35,4 @@ class SearchConfig:
     days_listed: int = 1
     radius: int = 30
     context: str | None = None
+    owner_id: int | None = None
