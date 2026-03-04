@@ -270,10 +270,6 @@ class FacebookEngine:
         await collector.flush()
         return products
     
-    async def run_search_now(self) -> None:
-        """Run search immediately for all watched searches, bypassing the timer."""
-        await self._run_searches()
-
     @tasks.loop(minutes=5.0)
     async def event_loop(self):
         await self._run_searches()

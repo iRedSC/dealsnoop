@@ -9,7 +9,6 @@ import discord  # type: ignore[import-untyped]
 from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import list_searches_embed, search_config_embed
-from dealsnoop.logger import logger
 from dealsnoop.search_config import SearchConfig
 from dealsnoop.snoop import Snoop
 
@@ -212,18 +211,13 @@ class Commands(commands.Cog):
         else:
             await interaction.response.send_message("No caches to clear.")
 
-    @discord.app_commands.command(name="forcesearch", description="Run all watched searches immediately, bypassing the timer.")
+    @discord.app_commands.command(name="forcesearch", description="Start a search now and reset the 5-minute loop timer.")
     async def forcesearch(self, interaction: discord.Interaction) -> None:
         if not self.snoop.searches.get_all_objects():
             await interaction.response.send_message("No watched searches. Add one with `/watch` first.")
             return
-        await interaction.response.defer()
-        try:
-            await self.snoop.run_search_now()
-            await interaction.followup.send("Search complete.")
-        except Exception as e:
-            logger.exception("Forcesearch failed")
-            await interaction.followup.send(f"Search failed: {e}")
+        self.snoop.trigger_search_and_reset_timer()
+        await interaction.response.send_message("Search started.")
 
     location = discord.app_commands.Group(name="location", description="Manage your default Marketplace location.")
 

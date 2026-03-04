@@ -14,8 +14,6 @@ class Engine(Protocol):
     snoop: Snoop
     event_loop: Loop
 
-    async def run_search_now(self) -> None: ...
-
 
 class Snoop:
     bot: Client
@@ -33,10 +31,10 @@ class Snoop:
         self.engines.add(engine)
         engine.snoop = self
 
-    async def run_search_now(self) -> None:
-        """Run all engine searches immediately, bypassing the timer."""
+    def trigger_search_and_reset_timer(self) -> None:
+        """Trigger a search now and reset the 5-minute loop timer for each engine."""
         for engine in self.engines:
-            await engine.run_search_now()
+            engine.event_loop.restart()
 
     async def get_location_for_city_code(self, city_code: str) -> str:
         """Resolve and cache human-readable location name for a city code."""
