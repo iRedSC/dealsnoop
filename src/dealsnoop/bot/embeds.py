@@ -109,7 +109,7 @@ def product_layout_view(
     )
 
     container = discord.ui.Container(section, accent_color=ACCENT_PRODUCT)
-    container.add_row(button)
+    container.add_item(discord.ui.ActionRow(button))
     container.add_item(discord.ui.TextDisplay(footer_content))
     view = discord.ui.LayoutView()
     view.add_item(container)
