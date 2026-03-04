@@ -512,7 +512,7 @@ class Client(commands.Bot):
             listing_id = custom_id[len(THUMBSDOWN_PREFIX) :]
             await self._handle_thumbsdown(interaction, listing_id)
             return
-        await super().on_interaction(interaction)
+        await self.tree.on_interaction(interaction)
 
     async def _handle_listing_desc_toggle(
         self, interaction: discord.Interaction, custom_id: str
