@@ -58,6 +58,7 @@ def product_embed(
 
 
 LISTING_DESC_PREFIX = "listing_desc:"
+THUMBSDOWN_PREFIX = "thumbsdown:"
 
 
 def _truncate_content(content: str, limit: int = TEXT_DISPLAY_LIMIT) -> str:
@@ -101,7 +102,13 @@ def product_layout_view(
     expanded_int = 1 if expanded else 0
     custom_id = f"{LISTING_DESC_PREFIX}{listing_id}:{expanded_int}"
     label = "Show less" if expanded else "Show more"
-    button = discord.ui.Button(label=label, custom_id=custom_id)
+    show_more_button = discord.ui.Button(label=label, custom_id=custom_id)
+
+    thumbs_down_button = discord.ui.Button(
+        label="",
+        emoji="\N{THUMBS DOWN SIGN}",
+        custom_id=f"{THUMBSDOWN_PREFIX}{listing_id}",
+    )
 
     thumbnail = discord.ui.Thumbnail(product.img or _PLACEHOLDER_IMG)
     section = discord.ui.Section(
@@ -110,7 +117,7 @@ def product_layout_view(
     )
 
     container = discord.ui.Container(section, accent_color=ACCENT_PRODUCT)
-    container.add_item(discord.ui.ActionRow(button))
+    container.add_item(discord.ui.ActionRow(show_more_button, thumbs_down_button))
     container.add_item(discord.ui.TextDisplay(footer_content))
     view = discord.ui.LayoutView()
     view.add_item(container)

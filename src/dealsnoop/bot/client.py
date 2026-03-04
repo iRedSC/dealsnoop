@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import TYPE_CHECKING
 
 import discord  # type: ignore[import-untyped]
@@ -10,6 +11,7 @@ from discord.ext import commands  # type: ignore[import-untyped]
 
 from dealsnoop.bot.embeds import (
     LISTING_DESC_PREFIX,
+    THUMBSDOWN_PREFIX,
     product_layout_view,
     search_config_embed,
     truncate_description,
@@ -24,6 +26,38 @@ if TYPE_CHECKING:
     from dealsnoop.snoop import Snoop
 
 GUILD = discord.Object(GUILD_ID)
+
+
+async def _get_thumbsdown_suggestion(
+    listing: dict, config: SearchConfig
+) -> str:
+    """Call AI to suggest a 1-2 sentence context addition based on disliked listing."""
+    terms = config.terms
+    target_price = config.target_price or "(no max price)"
+    context = config.context or "(none)"
+    prompt = f"""The user thumbs-downed this Facebook Marketplace listing. Given the listing and the watch criteria (terms, target price, context), infer why they likely disliked it. Suggest a 1-2 sentence addition to the watch's context field that would help the AI filter avoid similar listings in the future. Respond with ONLY the suggested context addition, no other text.
+
+Watch criteria:
+- Terms: {terms}
+- Target price: ${target_price}
+- Current context: {context}
+
+Listing:
+- Title: {listing.get('title', '')}
+- Description: {listing.get('description', '')}
+- Price: ${listing.get('price', '')}
+- Location: {listing.get('location', '')}
+"""
+
+    from dealsnoop.engines.base import get_chatgpt
+
+    chatgpt = get_chatgpt()
+    response = await asyncio.to_thread(
+        chatgpt.responses.create,
+        model="gpt-4o-mini",
+        input=prompt,
+    )
+    return (response.output_text or "").strip()
 
 
 def _parse_city_code(value: str) -> str:
@@ -147,14 +181,21 @@ class UpdateWatchModal(discord.ui.Modal, title="Update watch"):
 class UpdateContextModal(discord.ui.Modal, title="Update context"):
     """Modal for editing only the context field of a watch."""
 
-    def __init__(self, searches: SearchStore, config: SearchConfig) -> None:
+    def __init__(
+        self,
+        searches: SearchStore,
+        config: SearchConfig,
+        *,
+        initial_context: str | None = None,
+    ) -> None:
         super().__init__()
         self._searches = searches
         self._config = config
 
+        default = initial_context if initial_context is not None else (config.context or "")
         self.context_input = discord.ui.TextInput(
             label="Context",
-            default=config.context or "",
+            default=default,
             required=False,
             style=discord.TextStyle.paragraph,
             max_length=500,
@@ -181,13 +222,55 @@ class UpdateContextModal(discord.ui.Modal, title="Update context"):
         )
 
 
+THUMBSDOWN_APPROVE_PREFIX = "thumbsdown_approve:"
+THUMBSDOWN_CANCEL_PREFIX = "thumbsdown_cancel:"
+THUMBSDOWN_EDIT_PREFIX = "thumbsdown_edit:"
+
+
+class ThumbsDownFeedbackView(discord.ui.View):
+    """View with Approve, Cancel, Edit buttons for thumbs-down AI suggestion."""
+
+    def __init__(
+        self,
+        pending_id: str,
+        searches: SearchStore,
+    ) -> None:
+        super().__init__(timeout=900)  # 15 min
+        self._pending_id = pending_id
+        self._searches = searches
+
+        self.add_item(
+            discord.ui.Button(
+                label="Approve",
+                style=discord.ButtonStyle.success,
+                custom_id=f"{THUMBSDOWN_APPROVE_PREFIX}{pending_id}",
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="Cancel",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"{THUMBSDOWN_CANCEL_PREFIX}{pending_id}",
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="Edit",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"{THUMBSDOWN_EDIT_PREFIX}{pending_id}",
+            )
+        )
+
+
 class Client(commands.Bot):
     _unregistered_cogs: list[commands.Cog]
+    _thumbsdown_pending: dict[str, dict]
 
     def __init__(self, searches: SearchStore):
         super().__init__(command_prefix="!@#", intents=intents)
         self._unregistered_cogs = []
         self._searches = searches
+        self._thumbsdown_pending = {}
     
 
     def register_cog(self, cog: commands.Cog) -> None:
@@ -419,6 +502,25 @@ class Client(commands.Bot):
         if custom_id.startswith(LISTING_DESC_PREFIX):
             await self._handle_listing_desc_toggle(interaction, custom_id)
             return
+        if custom_id.startswith(THUMBSDOWN_PREFIX):
+            listing_id = custom_id[len(THUMBSDOWN_PREFIX) :]
+            await self._handle_thumbsdown(interaction, listing_id)
+            return
+        if custom_id.startswith(THUMBSDOWN_APPROVE_PREFIX):
+            await self._handle_thumbsdown_feedback(
+                interaction, custom_id[len(THUMBSDOWN_APPROVE_PREFIX) :], "approve"
+            )
+            return
+        if custom_id.startswith(THUMBSDOWN_CANCEL_PREFIX):
+            await self._handle_thumbsdown_feedback(
+                interaction, custom_id[len(THUMBSDOWN_CANCEL_PREFIX) :], "cancel"
+            )
+            return
+        if custom_id.startswith(THUMBSDOWN_EDIT_PREFIX):
+            await self._handle_thumbsdown_feedback(
+                interaction, custom_id[len(THUMBSDOWN_EDIT_PREFIX) :], "edit"
+            )
+            return
         await super().on_interaction(interaction)
 
     async def _handle_listing_desc_toggle(
@@ -470,6 +572,126 @@ class Client(commands.Bot):
             product, None, None, desc_display, listing_id_str, new_expanded
         )
         await interaction.edit_original_response(embed=None, view=view)
+
+    async def _handle_thumbsdown(
+        self, interaction: discord.Interaction, listing_id: str
+    ) -> None:
+        """Handle thumbs-down button: call AI, show suggestion with Approve/Cancel/Edit."""
+        await interaction.response.defer(ephemeral=True)
+
+        listing = await asyncio.to_thread(
+            self._searches.get_listing, listing_id
+        )
+        if not listing:
+            await interaction.followup.send(
+                "Listing or watch no longer available.",
+                ephemeral=True,
+            )
+            return
+
+        config = await asyncio.to_thread(
+            self._searches.get_config_by_id, listing["search_id"]
+        )
+        if not config:
+            await interaction.followup.send(
+                "Listing or watch no longer available.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            suggested = await _get_thumbsdown_suggestion(
+                listing, config
+            )
+        except Exception as e:
+            logger.exception("Thumbs-down AI suggestion failed: %s", e)
+            await interaction.followup.send(
+                "Could not generate suggestion. Try updating context manually.",
+                ephemeral=True,
+            )
+            return
+
+        if not (suggested or "").strip():
+            await interaction.followup.send(
+                "Could not generate suggestion. Try updating context manually.",
+                ephemeral=True,
+            )
+            return
+
+        pending_id = uuid.uuid4().hex[:12]
+        self._thumbsdown_pending[pending_id] = {
+            "suggested_context": suggested.strip(),
+            "search_id": config.id,
+            "listing_id": listing_id,
+        }
+
+        content = f"**Suggested context addition:**\n\n{suggested.strip()}"
+        view = ThumbsDownFeedbackView(pending_id, self._searches)
+        await interaction.followup.send(
+            content,
+            ephemeral=True,
+            view=view,
+        )
+
+    async def _handle_thumbsdown_feedback(
+        self,
+        interaction: discord.Interaction,
+        pending_id: str,
+        action: str,
+    ) -> None:
+        """Handle Approve, Cancel, or Edit for thumbs-down suggestion."""
+        pending = self._thumbsdown_pending.pop(pending_id, None)
+        if not pending:
+            await interaction.response.send_message(
+                "This suggestion has expired.",
+                ephemeral=True,
+            )
+            return
+
+        config = await asyncio.to_thread(
+            self._searches.get_config_by_id, pending["search_id"]
+        )
+        if not config:
+            await interaction.response.send_message(
+                "Watch already removed.",
+                ephemeral=True,
+            )
+            return
+
+        if action == "approve":
+            existing = config.context or ""
+            new_context = (
+                f"{existing}\n\n{pending['suggested_context']}"
+                if existing
+                else pending["suggested_context"]
+            )
+            updated = SearchConfig(
+                id=config.id,
+                terms=config.terms,
+                channel=config.channel,
+                city_code=config.city_code,
+                location_name=config.location_name,
+                target_price=config.target_price,
+                days_listed=config.days_listed,
+                radius=config.radius,
+                context=new_context.strip() or None,
+            )
+            await asyncio.to_thread(self._searches.add_object, updated)
+            await interaction.response.edit_message(
+                content="Context updated.",
+                view=None,
+            )
+        elif action == "cancel":
+            await interaction.response.edit_message(
+                content="Cancelled.",
+                view=None,
+            )
+        else:  # edit
+            initial = (config.context or "") + "\n\n" + pending["suggested_context"]
+            modal = UpdateContextModal(
+                self._searches, config, initial_context=initial
+            )
+            await interaction.response.send_modal(modal)
 
     async def send_embed(
         self,
