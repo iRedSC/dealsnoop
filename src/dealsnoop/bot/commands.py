@@ -319,7 +319,22 @@ class Commands(commands.Cog):
                 await interaction.response.send_message(f"Marked channel <#{target_id}> as bot-owned.")
             else:
                 self.snoop.searches.record_bot_owned_category(target_id)
-                await interaction.response.send_message(f"Marked category `{target_id}` as bot-owned.")
+                guild = interaction.guild or (
+                    self.snoop.bot.get_guild(interaction.guild_id) if interaction.guild_id else None
+                )
+                channel_count = 0
+                if guild:
+                    category = guild.get_channel(target_id)
+                    if isinstance(category, discord.CategoryChannel):
+                        for ch in category.channels:
+                            self.snoop.searches.record_bot_owned_channel(ch.id)
+                            channel_count += 1
+                if channel_count:
+                    await interaction.response.send_message(
+                        f"Marked category `{target_id}` and its {channel_count} channel(s) as bot-owned."
+                    )
+                else:
+                    await interaction.response.send_message(f"Marked category `{target_id}` as bot-owned.")
         except ValueError as e:
             await interaction.response.send_message(f"ERROR: {e}", ephemeral=True)
 
