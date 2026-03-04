@@ -78,7 +78,7 @@ def _product_content(
     main = f"### [{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}"
     parts = [product.date]
     if product.location:
-        parts.append(f'📍 {product.location}')
+        parts.append(product.location)
     if distance is not None and duration:
         parts.append(f"{round(distance)} mi ({duration})")
     footer = f"-# {' · '.join(parts)}"
