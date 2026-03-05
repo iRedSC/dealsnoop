@@ -81,17 +81,14 @@ def _truncate_content(content: str, limit: int = TEXT_DISPLAY_LIMIT) -> str:
 
 
 def _format_highlights(highlights: str | None) -> str:
-    """Normalize bullet/highlight format for display."""
+    """Normalize highlights for display (single line)."""
     if not highlights:
         return ""
     text = highlights.strip()
     if not text:
         return ""
-    # If single line with · separators, convert to bullet lines
-    if "\n" not in text and " · " in text:
-        items = [s.strip() for s in text.split(" · ") if s.strip()]
-        return "\n".join(f"- {item}" for item in items)
-    return text
+    # Keep as single line: collapse newlines to · separators
+    return " · ".join(s.strip() for s in text.replace("\n", " · ").split(" · ") if s.strip())
 
 
 def _product_content(
@@ -104,9 +101,7 @@ def _product_content(
     """Build markdown content for product display. Returns (main_content, footer_content)."""
     desc = description if description is not None else product.description
     formatted = _format_highlights(strengths_summary)
-    strengths_block = (
-        f"-# {formatted}\n\n" if formatted else ""
-    )
+    strengths_block = f"-# {formatted}\n\n" if formatted else ""
     main = f"### [{product.title}]({product.url})\n\n**${product.price}**\n\n{strengths_block}{desc}"
     parts = [product.date]
     if product.location:

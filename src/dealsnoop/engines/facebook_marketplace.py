@@ -395,8 +395,8 @@ Now extract the location from this text (return only the location, nothing else)
             if not passed:
                 thought_excerpt = f"{thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}"
                 reason_parts = [
-                    f"**Highlights:**\n{_format_highlights(strengths_summary)}",
-                    f"**Reasoning:** {thought_excerpt}",
+                    f"-# {_format_highlights(strengths_summary)}",
+                    f"{thought_excerpt}",
                 ]
                 if format_warning:
                     reason_parts.insert(1, f"WARNING: {format_warning}")
@@ -412,7 +412,7 @@ Now extract the location from this text (return only the location, nothing else)
             product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
             kept_reason_parts = [
-                f"**Highlights:**\n{_format_highlights(strengths_summary)}",
+                _format_highlights(strengths_summary),
                 f"**Reasoning:** {thought_trace}",
             ]
             if format_warning:
