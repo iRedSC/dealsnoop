@@ -22,6 +22,7 @@ TEXT_DISPLAY_LIMIT = 4000
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
 FIELD_REASON_LIMIT = 4096
+VIEW_ITEMS_LIMIT = 40  # LayoutView max children
 
 
 def truncate_description(
@@ -245,6 +246,14 @@ def grouped_listing_feed_layout(
     cache_hits = [e for e in entries if e.reason == "Cache hit"]
     others = [e for e in entries if e.reason != "Cache hit"]
 
+    # Reserve slots: cache hits summary (if any), and "...and X more" (if truncated)
+    slots_for_others = VIEW_ITEMS_LIMIT - (1 if cache_hits else 0)
+    truncated_count = 0
+    if len(others) > slots_for_others:
+        slots_for_others -= 1  # reserve slot for truncation message
+        truncated_count = len(others) - slots_for_others
+        others = others[:slots_for_others]
+
     view = discord.ui.LayoutView()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -264,6 +273,14 @@ def grouped_listing_feed_layout(
         content = _listing_content(f"{term_line}**{title}**\n{reason}", entry)
         view.add_item(
             _listing_container(content, _listing_accessory(entry), ACCENT_SKIPPED)
+        )
+
+    if truncated_count > 0:
+        view.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(f"… and {truncated_count} more skipped"),
+                accent_color=ACCENT_SKIPPED,
+            )
         )
 
     return view
