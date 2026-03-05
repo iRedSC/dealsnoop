@@ -534,7 +534,7 @@ Description: ```{description}```
 Price: `${price}`
 
 Respond in exactly this format (single line, if the listing isn't what the user is looking for, make bullet points "NA".):
-<Short reasoning> || <3 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted" (Don't include the price or title)> || <True or False>
+<Short reasoning> || <3 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted" (Keep in one line like example, don't include the price or title)> || <True or False>
     """)
         text = (response.output_text or "").strip()
         thought_trace, strengths_summary, passed, format_warning = self._parse_quality_output(text)
