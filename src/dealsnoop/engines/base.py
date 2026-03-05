@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from typing import TYPE_CHECKING
 
 import chromedriver_autoinstaller
 from openai import OpenAI
@@ -11,7 +12,10 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 from dealsnoop.config import FILE_PATH
-from dealsnoop.listing_cache import Cache
+from dealsnoop.listing_cache import Cache, DbCache
+
+if TYPE_CHECKING:
+    from dealsnoop.store import SearchStore
 
 options = Options()
 options.add_argument("--headless=new")
@@ -41,7 +45,10 @@ def get_browser() -> webdriver.Chrome:
     return webdriver.Chrome(options=options)
 
 
-def get_cache(name: str) -> Cache:
+def get_cache(name: str, store: "SearchStore | None" = None) -> Cache | DbCache:
+    """Return a cache. If store is provided, returns DB-backed DbCache; else file-based Cache."""
+    if store is not None:
+        return DbCache(store, name)
     return Cache(f"{FILE_PATH}{name}_cache.txt")
 
 

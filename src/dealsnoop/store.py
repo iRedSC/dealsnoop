@@ -67,6 +67,15 @@ CREATE TABLE IF NOT EXISTS location_cache (
 );
 """
 
+LISTING_CACHE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS listing_cache (
+    engine VARCHAR(50) NOT NULL,
+    listing_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (engine, listing_id)
+);
+"""
+
 LISTING_METADATA_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS listing_metadata (
     message_id BIGINT PRIMARY KEY,
@@ -160,6 +169,7 @@ class SearchStore:
             conn.execute(BOT_CONFIG_TABLE_SQL)
             conn.execute(USER_LOCATIONS_TABLE_SQL)
             conn.execute(LOCATION_CACHE_TABLE_SQL)
+            conn.execute(LISTING_CACHE_TABLE_SQL)
             conn.execute(LISTING_METADATA_TABLE_SQL)
             conn.execute(LISTINGS_TABLE_SQL)
             conn.execute(LISTING_MESSAGES_TABLE_SQL)
@@ -553,5 +563,50 @@ class SearchStore:
         """Clear all cached location names. Returns number of rows deleted."""
         with self._get_conn() as conn:
             cur = conn.execute("DELETE FROM location_cache")
+            conn.commit()
+        return cur.rowcount
+
+    def listing_cache_contains(self, engine: str, listing_id: str) -> bool:
+        """Check if a listing is in the cache for the given engine."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "SELECT 1 FROM listing_cache WHERE engine = %s AND listing_id = %s",
+                (engine, listing_id.strip()),
+            )
+            return cur.fetchone() is not None
+
+    def listing_cache_add(self, engine: str, listing_id: str) -> None:
+        """Add a listing to the cache, refreshing created_at if already present."""
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO listing_cache (engine, listing_id, created_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (engine, listing_id) DO UPDATE SET created_at = NOW()
+                """,
+                (engine, listing_id.strip()),
+            )
+            conn.commit()
+
+    def listing_cache_clear(self, engine: str) -> int:
+        """Clear all listings from the cache for the given engine."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM listing_cache WHERE engine = %s",
+                (engine,),
+            )
+            conn.commit()
+        return cur.rowcount
+
+    def listing_cache_flush_older_than_days(self, engine: str, days: int = 2) -> int:
+        """Remove cache entries older than the given number of days."""
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                """
+                DELETE FROM listing_cache
+                WHERE engine = %s AND created_at < NOW() - make_interval(days => %s)
+                """,
+                (engine, days),
+            )
             conn.commit()
         return cur.rowcount

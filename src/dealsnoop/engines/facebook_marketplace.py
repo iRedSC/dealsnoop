@@ -31,7 +31,7 @@ class FacebookEngine:
     def __init__(self, snoop):
         self.snoop = snoop
         self.browser = get_browser()
-        self.cache = get_cache("facebook")
+        self.cache = get_cache("facebook", snoop.searches)
         self.chatgpt = get_chatgpt()
 
 
@@ -502,8 +502,7 @@ Now extract the location from this text (return only the location, nothing else)
             await asyncio.sleep(5)
             await self.perform_search(search, "best_match")
             await asyncio.sleep(5)
-        if len(self.cache.urls) >= 2000:
-            self.cache.flush(1000)
+        self.cache.flush_old_entries()
 
     def validate_listing(self, link: Tag) -> tuple[bool, str | None]:
         """Returns (passed, skip_reason). skip_reason is None when passed."""

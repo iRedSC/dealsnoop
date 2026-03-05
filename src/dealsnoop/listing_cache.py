@@ -1,12 +1,17 @@
 """URL cache for avoiding duplicate listing notifications."""
 
 import os
-from typing import Set
+from typing import TYPE_CHECKING, Set
 
 from dealsnoop.logger import logger
 
+if TYPE_CHECKING:
+    from dealsnoop.store import SearchStore
+
 
 class Cache:
+    """File-based cache (legacy)."""
+
     def __init__(self, cache_file_path: str):
         """
         Initializes the Cache.
@@ -41,7 +46,7 @@ class Cache:
         else:
             logger.info(
                 f"Cache file not found at {self.cache_file_path}. "
-                "Starting with an empty cache."
+                "Starting with empty cache."
             )
             self.urls = set()
 
@@ -74,9 +79,13 @@ class Cache:
         self.save_cache()
         logger.info(f"Cache cleared: $M${self.cache_file_path}$W$")
 
+    def flush_old_entries(self) -> int:
+        """No-op for file-based cache; age-based flush is DB-only."""
+        return 0
+
     def flush(self, x: int):
         """
-        Removes the first x lines (URLs) from the cache file 
+        Removes the first x lines (URLs) from the cache file
         and updates the in-memory cache set.
 
         Args:
@@ -115,3 +124,42 @@ class Cache:
             )
         except IOError as e:
             logger.error(f"Error flushing cache: {e}")
+
+
+class DbCache:
+    """Database-backed cache that persists across restarts and flushes entries older than 2 days."""
+
+    def __init__(self, store: "SearchStore", engine: str, max_age_days: int = 2):
+        self._store = store
+        self._engine = engine
+        self._max_age_days = max_age_days
+        logger.info(f"DbCache initialized for engine: $B${engine}")
+
+    def add_url(self, url: str) -> None:
+        """Add a listing ID to the cache."""
+        self._store.listing_cache_add(self._engine, url)
+
+    def contains(self, url: str) -> bool:
+        """Check if a listing ID is already in the cache."""
+        return self._store.listing_cache_contains(self._engine, url)
+
+    def save_cache(self) -> None:
+        """No-op for DB cache; each add is persisted immediately."""
+        pass
+
+    def clear(self) -> None:
+        """Clear all entries from the cache for this engine."""
+        count = self._store.listing_cache_clear(self._engine)
+        logger.info(f"Cache cleared for engine $M${self._engine}$W$: {count} entries removed.")
+
+    def flush_old_entries(self) -> int:
+        """Remove entries older than max_age_days. Returns number removed."""
+        removed = self._store.listing_cache_flush_older_than_days(
+            self._engine, self._max_age_days
+        )
+        if removed:
+            logger.info(
+                f"Flushed {removed} cache entries older than {self._max_age_days} days "
+                f"for engine $M${self._engine}$W$"
+            )
+        return removed
