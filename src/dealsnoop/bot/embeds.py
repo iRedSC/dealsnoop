@@ -22,7 +22,10 @@ TEXT_DISPLAY_LIMIT = 4000
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
 FIELD_REASON_LIMIT = 4096
-VIEW_ITEMS_LIMIT = 40  # LayoutView max children
+VIEW_ITEMS_LIMIT = 40  # LayoutView max children (includes nested components)
+# Each listing entry: Container + Section + TextDisplay + Thumbnail ≈ 4 components
+COMPONENTS_PER_LISTING_ENTRY = 4
+COMPONENTS_PER_SIMPLE_CONTAINER = 2  # Container + TextDisplay (cache summary, truncation msg)
 
 
 def truncate_description(
@@ -246,13 +249,19 @@ def grouped_listing_feed_layout(
     cache_hits = [e for e in entries if e.reason == "Cache hit"]
     others = [e for e in entries if e.reason != "Cache hit"]
 
-    # Reserve slots: cache hits summary (if any), and "...and X more" (if truncated)
-    slots_for_others = VIEW_ITEMS_LIMIT - (1 if cache_hits else 0)
-    truncated_count = 0
-    if len(others) > slots_for_others:
-        slots_for_others -= 1  # reserve slot for truncation message
-        truncated_count = len(others) - slots_for_others
-        others = others[:slots_for_others]
+    # LayoutView has 40-component limit including nested components. Each listing entry
+    # uses ~4 components; cache summary and truncation msg each use ~2.
+    reserved_for_cache = COMPONENTS_PER_SIMPLE_CONTAINER if cache_hits else 0
+    max_without_truncation = (
+        VIEW_ITEMS_LIMIT - reserved_for_cache
+    ) // COMPONENTS_PER_LISTING_ENTRY
+    if len(others) <= max_without_truncation:
+        truncated_count = 0
+    else:
+        reserved = reserved_for_cache + COMPONENTS_PER_SIMPLE_CONTAINER
+        max_entries = (VIEW_ITEMS_LIMIT - reserved) // COMPONENTS_PER_LISTING_ENTRY
+        truncated_count = len(others) - max_entries
+        others = others[:max_entries]
 
     view = discord.ui.LayoutView()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
