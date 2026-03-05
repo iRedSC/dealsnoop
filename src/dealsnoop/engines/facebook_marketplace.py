@@ -238,12 +238,15 @@ Now extract the location from this text (return only the location, nothing else)
             html = await asyncio.to_thread(lambda: self.browser.page_source)
             soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
             if origin is None:
-                fallback = search.location_name or self.snoop.searches.get_location_name(
+                stored = search.location_name or self.snoop.searches.get_location_name(
                     search.city_code
                 )
-                origin = await self._extract_page_location(
-                    soup, search.city_code, fallback=fallback, page_html=html
-                )
+                if stored and self._is_plausible_location(stored.strip()):
+                    origin = stored.strip()
+                else:
+                    origin = await self._extract_page_location(
+                        soup, search.city_code, fallback=stored, page_html=html
+                    )
             for link in soup.find_all('a'):
                 listings.append((link, term))
             await asyncio.sleep(1)
