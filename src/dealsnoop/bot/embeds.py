@@ -25,14 +25,26 @@ FIELD_REASON_LIMIT = 4096
 
 
 def truncate_description(
-    description: str, max_lines: int = DESCRIPTION_TRUNCATE_LINES
+    description: str,
+    max_lines: int = DESCRIPTION_TRUNCATE_LINES,
+    max_chars: int = DESCRIPTION_TRUNCATE_CHARS,
 ) -> str:
-    """Truncate to max_lines, append '...' if truncated."""
-    lines = description.strip().splitlines()
-    if len(lines) <= max_lines:
-        return description
-    truncated = "\n".join(lines[:max_lines])
-    return truncated.rstrip() + "\n..."
+    """Truncate to max_lines and/or max_chars, append '...' if truncated."""
+    text = description.strip()
+    lines = text.splitlines()
+    truncated = False
+
+    if len(lines) > max_lines:
+        truncated = True
+        text = "\n".join(lines[:max_lines]).rstrip()
+
+    if len(text) > max_chars:
+        truncated = True
+        text = text[: max_chars - 3].rstrip() + "..."
+
+    if truncated and not text.endswith("..."):
+        text = text.rstrip() + "\n..."
+    return text
 
 
 def product_embed(
