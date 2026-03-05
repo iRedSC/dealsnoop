@@ -13,7 +13,7 @@ from discord.ext import tasks  # type: ignore[import-untyped]
 from selenium.common.exceptions import NoSuchElementException  # type: ignore[import-untyped]
 from selenium.webdriver.common.by import By  # type: ignore[import-untyped]
 
-from dealsnoop.bot.embeds import product_embed
+from dealsnoop.bot.embeds import product_embed, _format_highlights
 from dealsnoop.engines.base import get_browser, get_cache, get_chatgpt
 from dealsnoop.exceptions import LocationResolutionError
 from dealsnoop.search_config import build_watch_command
@@ -288,7 +288,7 @@ Now extract the location from this text (return only the location, nothing else)
         text = (raw_output or "").strip()
         warnings: list[str] = []
         if not text:
-            return ("No reasoning provided.", "No strengths/weaknesses provided.", True, "AI output was empty.")
+            return ("No reasoning provided.", "No highlights provided.", True, "AI output was empty.")
 
         parts = [part.strip() for part in text.split("||")]
         if len(parts) != 3:
@@ -299,7 +299,7 @@ Now extract the location from this text (return only the location, nothing else)
         has_verdict_section = len(parts) >= 3 and bool(parts[2])
 
         reasoning = parts[0] if has_reasoning_section else "No reasoning provided."
-        strengths = parts[1] if has_strengths_section else "No strengths/weaknesses provided."
+        strengths = parts[1] if has_strengths_section else "No highlights provided."
         verdict_section = parts[2] if len(parts) >= 3 else text
 
         verdict_match = re.search(r"\b(true|false)\b", verdict_section, re.IGNORECASE)
@@ -313,7 +313,7 @@ Now extract the location from this text (return only the location, nothing else)
         if not has_reasoning_section:
             warnings.append("Missing reasoning section.")
         if not has_strengths_section:
-            warnings.append("Missing strengths/weaknesses section.")
+            warnings.append("Missing highlights section.")
         if not has_verdict_section:
             warnings.append("Missing verdict section.")
 
@@ -395,8 +395,8 @@ Now extract the location from this text (return only the location, nothing else)
             if not passed:
                 thought_excerpt = f"{thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}"
                 reason_parts = [
-                    f"Strengths/weaknesses: {strengths_summary}",
-                    f"Reasoning: {thought_excerpt}",
+                    f"**Highlights:**\n{_format_highlights(strengths_summary)}",
+                    f"**Reasoning:** {thought_excerpt}",
                 ]
                 if format_warning:
                     reason_parts.insert(1, f"WARNING: {format_warning}")
@@ -411,7 +411,10 @@ Now extract the location from this text (return only the location, nothing else)
 
             product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
-            kept_reason_parts = [f"Strengths/weaknesses: {strengths_summary}", f"Reasoning: {thought_trace}"]
+            kept_reason_parts = [
+                f"**Highlights:**\n{_format_highlights(strengths_summary)}",
+                f"**Reasoning:** {thought_trace}",
+            ]
             if format_warning:
                 kept_reason_parts.insert(1, f"WARNING: {format_warning}")
             kept_reason_parts.append("Matched")
@@ -531,7 +534,7 @@ Description: ```{description}```
 Price: `${price}`
 
 Respond in exactly this format (single line):
-<Short reasoning> || <3-6 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted"> || <True or False>
+<Short reasoning> || <3 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted" (Don't include the price or title)> || <True or False>
     """)
         text = (response.output_text or "").strip()
         thought_trace, strengths_summary, passed, format_warning = self._parse_quality_output(text)
