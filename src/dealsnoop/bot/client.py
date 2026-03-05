@@ -304,31 +304,28 @@ class Client(commands.Bot):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
+        def _get_search_id_for_message(message_id: int) -> str | None:
+            """Return search_id for a message (listing, metadata, etc.) or None."""
+            listing = self._searches.get_listing_by_message_id(message_id)
+            if listing:
+                return listing["search_id"]
+            meta = self._searches.get_listing_metadata(message_id)
+            return meta["search_id"] if meta else None
+
         @self.tree.context_menu(name="Get watch command")
         async def get_watch_command(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
             await interaction.response.defer(ephemeral=True)
-            listing = await asyncio.to_thread(
-                self._searches.get_listing_by_message_id, message.id
+            search_id = await asyncio.to_thread(
+                _get_search_id_for_message, message.id
             )
-            if listing and listing.get("watch_command"):
-                cmd = listing["watch_command"]
-                await interaction.followup.send(
-                    f"```\n{cmd}\n```",
-                    ephemeral=True,
-                )
-                return
-            meta = await asyncio.to_thread(
-                self._searches.get_listing_metadata, message.id
-            )
-            if meta is None:
+            if search_id is None:
                 await interaction.followup.send(
                     "No watch found for this message.",
                     ephemeral=True,
                 )
                 return
-            search_id = meta["search_id"]
             config = await asyncio.to_thread(
                 self._searches.get_config_by_id, search_id
             )
@@ -357,22 +354,15 @@ class Client(commands.Bot):
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
             await interaction.response.defer(ephemeral=True)
-            listing = await asyncio.to_thread(
-                self._searches.get_listing_by_message_id, message.id
+            search_id = await asyncio.to_thread(
+                _get_search_id_for_message, message.id
             )
-            if listing:
-                search_id = listing["search_id"]
-            else:
-                meta = await asyncio.to_thread(
-                    self._searches.get_listing_metadata, message.id
+            if search_id is None:
+                await interaction.followup.send(
+                    "No watch found for this message.",
+                    ephemeral=True,
                 )
-                if meta is None:
-                    await interaction.followup.send(
-                        "No watch found for this message.",
-                        ephemeral=True,
-                    )
-                    return
-                search_id = meta["search_id"]
+                return
             config = await asyncio.to_thread(
                 self._searches.get_config_by_id, search_id
             )
@@ -412,22 +402,15 @@ class Client(commands.Bot):
         async def update_watch(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
-            listing = await asyncio.to_thread(
-                self._searches.get_listing_by_message_id, message.id
+            search_id = await asyncio.to_thread(
+                _get_search_id_for_message, message.id
             )
-            if listing:
-                search_id = listing["search_id"]
-            else:
-                meta = await asyncio.to_thread(
-                    self._searches.get_listing_metadata, message.id
+            if search_id is None:
+                await interaction.response.send_message(
+                    "No watch found for this message.",
+                    ephemeral=True,
                 )
-                if meta is None:
-                    await interaction.response.send_message(
-                        "No watch found for this message.",
-                        ephemeral=True,
-                    )
-                    return
-                search_id = meta["search_id"]
+                return
             config = await asyncio.to_thread(
                 self._searches.get_config_by_id, search_id
             )
@@ -451,22 +434,15 @@ class Client(commands.Bot):
         async def update_context(
             interaction: discord.Interaction, message: discord.Message
         ) -> None:
-            listing = await asyncio.to_thread(
-                self._searches.get_listing_by_message_id, message.id
+            search_id = await asyncio.to_thread(
+                _get_search_id_for_message, message.id
             )
-            if listing:
-                search_id = listing["search_id"]
-            else:
-                meta = await asyncio.to_thread(
-                    self._searches.get_listing_metadata, message.id
+            if search_id is None:
+                await interaction.response.send_message(
+                    "No watch found for this message.",
+                    ephemeral=True,
                 )
-                if meta is None:
-                    await interaction.response.send_message(
-                        "No watch found for this message.",
-                        ephemeral=True,
-                    )
-                    return
-                search_id = meta["search_id"]
+                return
             config = await asyncio.to_thread(
                 self._searches.get_config_by_id, search_id
             )

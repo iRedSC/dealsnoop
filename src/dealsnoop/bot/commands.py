@@ -193,7 +193,8 @@ class Commands(commands.Cog):
             )
             self.snoop.searches.add_object(config)
             embed = search_config_embed(config)
-            await self._respond(interaction, embed=embed)
+            msg = await interaction.followup.send(embed=embed)
+            self.snoop.bot.record_listing_metadata(msg.id, msg.channel_id, config.id)
         except ValueError as e:
             await self._respond(interaction, content=f"ERROR: {e}")
         except discord.Forbidden:
