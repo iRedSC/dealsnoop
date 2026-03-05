@@ -24,6 +24,7 @@ class ListingLog:
     url: str | None = None
     price: float | None = None
     img: str | None = None
+    search_term: str | None = None
 
 
 class SearchLogCollector:
@@ -48,6 +49,7 @@ class SearchLogCollector:
         reason: str,
         url: str | None = None,
         img: str | None = None,
+        search_term: str | None = None,
     ) -> None:
         """Add a grouped entry (cache hit, outside radius, malformed). Buffered, sent every 1s."""
         self._grouped_entries.append(
@@ -59,6 +61,7 @@ class SearchLogCollector:
                 url=url,
                 price=None,
                 img=img,
+                search_term=search_term,
             )
         )
 
@@ -69,6 +72,7 @@ class SearchLogCollector:
         url: str | None = None,
         price: float | None = None,
         img: str | None = None,
+        search_term: str | None = None,
     ) -> None:
         """Log and send immediately to Discord feed."""
         entry = ListingLog(
@@ -79,6 +83,7 @@ class SearchLogCollector:
             url=url,
             price=price,
             img=img,
+            search_term=search_term,
         )
         self._log_entry(entry)
         asyncio.create_task(self._send_individual(entry))
@@ -90,6 +95,7 @@ class SearchLogCollector:
         url: str | None = None,
         price: float | None = None,
         img: str | None = None,
+        search_term: str | None = None,
     ) -> None:
         """Log and send immediately to Discord feed."""
         entry = ListingLog(
@@ -100,6 +106,7 @@ class SearchLogCollector:
             url=url,
             price=price,
             img=img,
+            search_term=search_term,
         )
         self._log_entry(entry)
         asyncio.create_task(self._send_individual(entry))

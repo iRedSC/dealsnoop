@@ -225,8 +225,11 @@ Now extract the location from this text (return only the location, nothing else)
             f"Could not resolve location from Marketplace page for city code {city_code or '(unknown)'}"
         )
 
-    async def gather_listings(self, search: SearchConfig, sort: str) -> tuple[list[Tag], str]:
-        listings = []
+    async def gather_listings(
+        self, search: SearchConfig, sort: str
+    ) -> tuple[list[tuple[Tag, str]], str]:
+        """Return (list of (link, search_term), origin). Each link is tagged with the exact term searched."""
+        listings: list[tuple[Tag, str]] = []
         origin: str | None = None
         for term in search.terms:
             url = f'https://www.facebook.com/marketplace/{search.city_code}/search?query={term}&sortBy={sort}&daysSinceListed={search.days_listed}&exact=false&radius_in_km={search.radius}'
@@ -241,7 +244,8 @@ Now extract the location from this text (return only the location, nothing else)
                 origin = await self._extract_page_location(
                     soup, search.city_code, fallback=fallback, page_html=html
                 )
-            listings += soup.find_all('a')
+            for link in soup.find_all('a'):
+                listings.append((link, term))
             await asyncio.sleep(1)
         if origin is None:
             raise LocationResolutionError(
@@ -321,6 +325,11 @@ Now extract the location from this text (return only the location, nothing else)
         return (reasoning, strengths, passed, warning_text)
 
     async def perform_search(self, search: SearchConfig, sort: str) -> list[Product]:
+        # Re-fetch config from store to ensure any updated terms are used
+        latest = self.snoop.searches.get_config_by_id(search.id)
+        if latest is not None:
+            search = latest
+
         products = []
         feed_channel_id = self.snoop.searches.get_feed_channel_id()
         collector = SearchLogCollector(
@@ -330,18 +339,20 @@ Now extract the location from this text (return only the location, nothing else)
         )
         collector.start()
 
-        links, origin = await self.gather_listings(search, sort)
+        link_term_pairs, origin = await self.gather_listings(search, sort)
         self.snoop.searches.set_location_name(search.city_code, origin)
         if search.location_name != origin:
             self.snoop.searches.add_object(replace(search, location_name=origin))
-        logger.info(f"$G${search.id}$W$: found {len(links)} links on page")
-        for link in links:
+        logger.info(f"$G${search.id}$W$: found {len(link_term_pairs)} links on page")
+        for link, search_term in link_term_pairs:
             passed, skip_reason = self.validate_listing(link)
             if not passed:
                 # Only log "Cache hit" - real listings we've seen. Skip logging "Invalid listing"
                 # (no img/alt/href) since those are page chrome (Terms, Help, Settings, etc.).
                 if skip_reason == "Cache hit":
-                    collector.add_grouped(self._title_from_link(link), skip_reason)
+                    collector.add_grouped(
+                        self._title_from_link(link), skip_reason, search_term=search_term
+                    )
                 continue
 
             text = '\n'.join(link.stripped_strings)
@@ -349,7 +360,11 @@ Now extract the location from this text (return only the location, nothing else)
             if len(lines) < 2:
                 url, img = self._url_and_img_from_link(link)
                 collector.add_grouped(
-                    self._title_from_link(link), "Malformed listing", url=url, img=img
+                    self._title_from_link(link),
+                    "Malformed listing",
+                    url=url,
+                    img=img,
+                    search_term=search_term,
                 )
                 continue
 
@@ -373,6 +388,7 @@ Now extract the location from this text (return only the location, nothing else)
                     f"Outside radius ({location} - {round(distance)} mi)",
                     url=url,
                     img=img,
+                    search_term=search_term,
                 )
                 continue
 
@@ -406,6 +422,7 @@ Now extract the location from this text (return only the location, nothing else)
                     url=re.sub(r'\?.*', '', url),
                     price=price,
                     img=img,
+                    search_term=search_term,
                 )
                 continue
 
@@ -419,7 +436,12 @@ Now extract the location from this text (return only the location, nothing else)
                 kept_reason_parts.insert(1, f"WARNING: {format_warning}")
             kept_reason_parts.append("Matched")
             collector.add_individual_kept(
-                title, "\n".join(kept_reason_parts), url=product.url, price=price, img=img
+                title,
+                "\n".join(kept_reason_parts),
+                url=product.url,
+                price=price,
+                img=img,
+                search_term=search_term,
             )
 
             listing_id = re.search(r"/marketplace/item/(\d+)", product.url)

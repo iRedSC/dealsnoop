@@ -260,7 +260,8 @@ def grouped_listing_feed_layout(
     for entry in others:
         title = entry.title[:FIELD_NAME_LIMIT] if len(entry.title) <= FIELD_NAME_LIMIT else entry.title[: FIELD_NAME_LIMIT - 3] + "..."
         reason = entry.reason[:FIELD_REASON_LIMIT] if len(entry.reason) <= FIELD_REASON_LIMIT else entry.reason[: FIELD_REASON_LIMIT - 3] + "..."
-        content = _listing_content(f"**{title}**\n{reason}", entry)
+        term_line = f"Searched: `{entry.search_term}`\n" if entry.search_term else ""
+        content = _listing_content(f"{term_line}**{title}**\n{reason}", entry)
         view.add_item(
             _listing_container(content, _listing_accessory(entry), ACCENT_SKIPPED)
         )
@@ -277,7 +278,10 @@ def individual_listing_feed_layout(entry: ListingLog) -> discord.ui.LayoutView:
     value = entry.reason
     if len(value) > FIELD_VALUE_LIMIT:
         value = value[: FIELD_VALUE_LIMIT - 3] + "..."
-    content = _listing_content(f"**Search: {entry.search_id}**\n**{name}**\n{value}", entry)
+    term_line = f"Searched: `{entry.search_term}`\n" if entry.search_term else ""
+    content = _listing_content(
+        f"**Search: {entry.search_id}**\n{term_line}**{name}**\n{value}", entry
+    )
     accent_color = ACCENT_KEPT if entry.outcome.value == "KEPT" else ACCENT_SKIPPED
 
     view = discord.ui.LayoutView()
