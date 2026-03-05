@@ -533,7 +533,7 @@ Title: `{title}`
 Description: ```{description}```
 Price: `${price}`
 
-Respond in exactly this format (single line, if the listing isn't what the user is looking for, make bullet points "NA".):
+Respond in exactly this format (single line, if the listing isn't what the user is looking for, make bullet points section just "NA".):
 <Short reasoning> || <3 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted" (Keep in one line like example, don't include the price or title)> || <True or False>
     """)
         text = (response.output_text or "").strip()
