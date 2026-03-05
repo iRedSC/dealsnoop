@@ -283,6 +283,43 @@ Now extract the location from this text (return only the location, nothing else)
             img = img_tag["src"]
         return (url, img)
 
+    def _parse_quality_output(self, raw_output: str) -> tuple[str, str, bool, str | None]:
+        """Parse `reasoning || strengths/weaknesses || true/false` output."""
+        text = (raw_output or "").strip()
+        warnings: list[str] = []
+        if not text:
+            return ("No reasoning provided.", "No strengths/weaknesses provided.", True, "AI output was empty.")
+
+        parts = [part.strip() for part in text.split("||")]
+        if len(parts) != 3:
+            warnings.append("Expected 3 sections separated by '||'.")
+
+        has_reasoning_section = len(parts) >= 1 and bool(parts[0])
+        has_strengths_section = len(parts) >= 2 and bool(parts[1])
+        has_verdict_section = len(parts) >= 3 and bool(parts[2])
+
+        reasoning = parts[0] if has_reasoning_section else "No reasoning provided."
+        strengths = parts[1] if has_strengths_section else "No strengths/weaknesses provided."
+        verdict_section = parts[2] if len(parts) >= 3 else text
+
+        verdict_match = re.search(r"\b(true|false)\b", verdict_section, re.IGNORECASE)
+        if verdict_match:
+            passed = verdict_match.group(1).lower() == "true"
+        else:
+            fallback_match = re.search(r"\b(true|false)\b", text, re.IGNORECASE)
+            passed = fallback_match.group(1).lower() == "true" if fallback_match else True
+            warnings.append("Missing valid True/False verdict section.")
+
+        if not has_reasoning_section:
+            warnings.append("Missing reasoning section.")
+        if not has_strengths_section:
+            warnings.append("Missing strengths/weaknesses section.")
+        if not has_verdict_section:
+            warnings.append("Missing verdict section.")
+
+        warning_text = "; ".join(warnings) if warnings else None
+        return (reasoning, strengths, passed, warning_text)
+
     async def perform_search(self, search: SearchConfig, sort: str) -> list[Product]:
         products = []
         feed_channel_id = self.snoop.searches.get_feed_channel_id()
@@ -352,13 +389,20 @@ Now extract the location from this text (return only the location, nothing else)
             img = link.find('img')['src']
             date, description = await self.get_product_info(url)
 
-            passed, thought_trace = await self.validate_quality(
+            passed, thought_trace, strengths_summary, format_warning = await self.validate_quality(
                 title, search.terms, search.target_price, price, description, search.context
             )
             if not passed:
+                thought_excerpt = f"{thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}"
+                reason_parts = [
+                    f"Strengths/weaknesses: {strengths_summary}",
+                    f"Reasoning: {thought_excerpt}",
+                ]
+                if format_warning:
+                    reason_parts.insert(1, f"WARNING: {format_warning}")
                 collector.add_individual_skipped(
                     title,
-                    f"Quality check failed: {thought_trace[:200]}{'...' if len(thought_trace) > 200 else ''}",
+                    "\n".join(reason_parts),
                     url=re.sub(r'\?.*', '', url),
                     price=price,
                     img=img,
@@ -367,8 +411,12 @@ Now extract the location from this text (return only the location, nothing else)
 
             product = Product(price, title, description, location, date, re.sub(r'\?.*', '', url), img)
             products.append(product)
+            kept_reason_parts = [f"Strengths/weaknesses: {strengths_summary}", f"Reasoning: {thought_trace}"]
+            if format_warning:
+                kept_reason_parts.insert(1, f"WARNING: {format_warning}")
+            kept_reason_parts.append("Matched")
             collector.add_individual_kept(
-                title, "Matched", url=product.url, price=price, img=img
+                title, "\n".join(kept_reason_parts), url=product.url, price=price, img=img
             )
 
             listing_id = re.search(r"/marketplace/item/(\d+)", product.url)
@@ -389,11 +437,18 @@ Now extract the location from this text (return only the location, nothing else)
                     url=product.url,
                     img=img,
                     thought_trace=trace,
+                    ai_strengths=strengths_summary,
                     watch_command=watch_cmd,
                 )
                 truncated_desc = truncate_description(description)
                 view = product_layout_view(
-                    product, distance, duration, truncated_desc, listing_id, expanded=False
+                    product,
+                    distance,
+                    duration,
+                    truncated_desc,
+                    listing_id,
+                    expanded=False,
+                    strengths_summary=strengths_summary,
                 )
                 await self.snoop.bot.send_layout(
                     view, search.channel, listing_id=listing_id
@@ -453,38 +508,32 @@ Now extract the location from this text (return only the location, nothing else)
         price: float,
         description: str,
         context: str | None,
-    ) -> tuple[bool, str]:
-        """Returns (passed, thought_trace)."""
+    ) -> tuple[bool, str, str, str | None]:
+        """Returns (passed, thought_trace, strengths_summary, format_warning)."""
         logger.info("Validating listing quality")
         if not target_price:
             target_price = "(no max price)"
         response = await asyncio.to_thread(self.chatgpt.responses.create,
-        model="gpt-5-mini",
-        reasoning={"effort": "medium", "summary": "auto"},
+        model="gpt-5.1",
         input=f"""
-Evaluate this Facebook Marketplace listing and return True or False.
+The user searched Facebook Marketplace for '{terms}' and reveived this result. Evaluate it and decide whether it is what the user is looking for, and if it should be shown to them.
 
 Criteria:
 - The listing must actually be selling '{terms}', not an ISO/WTB post, parts-only, or unrelated item.
 - The listing must appear to be a real, usable item — not a scam or broken/for-parts (unless '{context}' says otherwise).
-- Price must be at or below ${target_price}. Only allow higher if the item is a genuinely strong deal. Context: '{context}'
+- Price must be at or below ${target_price}. Only allow higher if the item is a genuinely strong deal. 
+
+The user defined this context, please use it in your evaluation: '{context}'
 
 Listing:
-Title: {title}
-Description: {description}
-Price: ${price}
+Title: `{title}`
+Description: ```{description}```
+Price: `${price}`
 
-Respond with only True or False.
+Respond in exactly this format (single line):
+<Short reasoning> || <Very short strengths/weaknesses of product> || <True or False>
     """)
-        text = (response.output_text or "").strip().lower()
-        match = re.search(r"\b(true|false)\b", text)
-        passed = match.group(1) == "true" if match else True
-        thought_trace = ""
-        for item in getattr(response, "output", []) or []:
-            if getattr(item, "type", None) == "reasoning" and getattr(item, "summary", None):
-                parts = [s.text for s in item.summary if getattr(s, "text", None)]
-                if parts:
-                    thought_trace = "\n".join(parts)
-                    break
-        return (passed, thought_trace)
+        text = (response.output_text or "").strip()
+        thought_trace, strengths_summary, passed, format_warning = self._parse_quality_output(text)
+        return (passed, thought_trace, strengths_summary, format_warning)
 

@@ -27,6 +27,7 @@ class ListingRow(TypedDict):
     url: str
     img: str
     thought_trace: str | None
+    ai_strengths: str | None
     watch_command: str
 
 CREATE_TABLE_SQL = """
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS listings (
     url TEXT NOT NULL,
     img TEXT NOT NULL,
     thought_trace TEXT,
+    ai_strengths TEXT,
     watch_command TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -166,6 +168,7 @@ class SearchStore:
             conn.execute("ALTER TABLE searches DROP COLUMN IF EXISTS city")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS location_name TEXT")
             conn.execute("ALTER TABLE searches ADD COLUMN IF NOT EXISTS owner_id BIGINT")
+            conn.execute("ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_strengths TEXT")
             conn.commit()
         logger.info("Database schema initialized.")
 
@@ -283,6 +286,7 @@ class SearchStore:
         url: str,
         img: str,
         thought_trace: str | None,
+        ai_strengths: str | None,
         watch_command: str,
     ) -> None:
         """Insert or upsert a listing into the listings table."""
@@ -291,9 +295,9 @@ class SearchStore:
                 """
                 INSERT INTO listings (
                     id, search_id, title, description, price, location,
-                    date, url, img, thought_trace, watch_command
+                    date, url, img, thought_trace, ai_strengths, watch_command
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     search_id = EXCLUDED.search_id,
                     title = EXCLUDED.title,
@@ -304,6 +308,7 @@ class SearchStore:
                     url = EXCLUDED.url,
                     img = EXCLUDED.img,
                     thought_trace = EXCLUDED.thought_trace,
+                    ai_strengths = EXCLUDED.ai_strengths,
                     watch_command = EXCLUDED.watch_command
                 """,
                 (
@@ -317,6 +322,7 @@ class SearchStore:
                     url,
                     img,
                     thought_trace,
+                    ai_strengths,
                     watch_command,
                 ),
             )

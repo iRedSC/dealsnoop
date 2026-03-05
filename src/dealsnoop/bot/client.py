@@ -561,7 +561,13 @@ class Client(commands.Bot):
             img=listing["img"],
         )
         view = product_layout_view(
-            product, None, None, desc_display, listing_id_str, new_expanded
+            product,
+            None,
+            None,
+            desc_display,
+            listing_id_str,
+            new_expanded,
+            strengths_summary=listing.get("ai_strengths"),
         )
         await interaction.edit_original_response(embed=None, view=view)
 

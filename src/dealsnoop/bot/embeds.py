@@ -73,10 +73,14 @@ def _product_content(
     distance: float | None,
     duration: str | None,
     description: str | None,
+    strengths_summary: str | None = None,
 ) -> tuple[str, str]:
     """Build markdown content for product display. Returns (main_content, footer_content)."""
     desc = description if description is not None else product.description
-    main = f"### [{product.title}]({product.url})\n\n**${product.price}**\n\n{desc}"
+    strengths_block = (
+        f"**Strengths/weaknesses:** {strengths_summary}\n\n" if strengths_summary else ""
+    )
+    main = f"### [{product.title}]({product.url})\n\n**${product.price}**\n\n{strengths_block}{desc}"
     parts = [product.date]
     if product.location:
         parts.append(product.location)
@@ -93,9 +97,12 @@ def product_layout_view(
     description: str | None,
     listing_id: str,
     expanded: bool,
+    strengths_summary: str | None = None,
 ) -> discord.ui.LayoutView:
     """Build Components V2 LayoutView for a product. Thumbnail image, Show more button below description, then date/location."""
-    main, footer = _product_content(product, distance, duration, description)
+    main, footer = _product_content(
+        product, distance, duration, description, strengths_summary=strengths_summary
+    )
     main_content = _truncate_content(main)
     footer_content = _truncate_content(footer)
 
