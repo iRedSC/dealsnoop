@@ -531,7 +531,7 @@ Description: ```{description}```
 Price: `${price}`
 
 Respond in exactly this format (single line):
-<Short reasoning> || <Very short strengths/weaknesses of product> || <True or False>
+<Short reasoning> || <3-6 bullet points of listing, i.e. "Oak · Small chip in corner · Just repainted"> || <True or False>
     """)
         text = (response.output_text or "").strip()
         thought_trace, strengths_summary, passed, format_warning = self._parse_quality_output(text)
